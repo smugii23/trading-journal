@@ -3,6 +3,9 @@ package models
 import (
 	"database/sql"
 	"errors"
+	"log"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -19,9 +22,22 @@ type Trade struct {
 	Screenshot string
 }
 
+type TradeFilter struct {
+	StartDate *time.Time
+	EndDate   *time.Time
+	Ticker    string
+	MinProfit *float64
+	MaxProfit *float64
+	Limit     int
+	Offset    int
+	SortBy    string
+	SortDesc  bool
+}
+
 type DbExecutor interface {
 	Prepare(query string) (*sql.Stmt, error)
 	QueryRow(query string, args ...interface{}) *sql.Row
+	Query(query string, args ...interface{}) (*sql.Rows, error)
 	Exec(query string, args ...interface{}) (sql.Result, error)
 }
 
@@ -60,4 +76,78 @@ func getTrade(db DbExecutor, id int) (Trade, error) {
 		return trade, errors.New("failed to retrieve trade")
 	}
 	return trade, nil
+}
+func listTrades(db DbExecutor, filter TradeFilter) ([]Trade, error) {
+	// need to get the condition with the ${parameter index number}
+	var conditions []string
+	// also need to get the actual parameter value, []interface{} for flexible variable type
+	var parameters []interface{}
+	parameterIndex := 1
+	if filter.StartDate != nil {
+		conditions = append(conditions, "trade_date >= $"+strconv.Itoa(parameterIndex))
+		parameters = append(parameters, *filter.StartDate)
+		parameterIndex++
+	}
+	if filter.EndDate != nil {
+		conditions = append(conditions, "trade_date <= $"+strconv.Itoa(parameterIndex))
+		parameters = append(parameters, *filter.EndDate)
+		parameterIndex++
+	}
+	if filter.Ticker != "" {
+		conditions = append(conditions, "ticker = $"+strconv.Itoa(parameterIndex))
+		parameters = append(parameters, filter.Ticker)
+		parameterIndex++
+	}
+	if filter.MinProfit != nil {
+		conditions = append(conditions, "(exit_price - entry_price) * quantity >= $"+strconv.Itoa(parameterIndex))
+		parameters = append(parameters, *filter.MinProfit)
+		parameterIndex++
+	}
+	if filter.MaxProfit != nil {
+		conditions = append(conditions, "(exit_price - entry_price) * quantity <= $"+strconv.Itoa(parameterIndex))
+		parameters = append(parameters, *filter.MaxProfit)
+		parameterIndex++
+	}
+	query := "SELECT id, ticker, entry_price, exit_price, quantity, trade_date, stop_loss, take_profit, notes, screenshot_url FROM trades"
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+	if filter.SortBy != "" {
+		query += " ORDER BY " + filter.SortBy
+		if filter.SortDesc {
+			query += " DESC"
+		} else {
+			query += " ASC"
+		}
+	}
+	if filter.Limit > 0 {
+		query += " LIMIT $" + strconv.Itoa(parameterIndex)
+		parameters = append(parameters, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		query += " OFFSET $" + strconv.Itoa(parameterIndex)
+		parameters = append(parameters, filter.Offset)
+	}
+	rows, err := db.Query(query, parameters...)
+	if err != nil {
+		log.Printf("Query execution error: %v", err)
+		return nil, errors.New("failed to retrieve trades")
+	}
+	defer rows.Close()
+	var trades []Trade
+	for rows.Next() {
+		var trade Trade
+		err := rows.Scan(&trade.ID, &trade.Ticker, &trade.EntryPrice, &trade.ExitPrice,
+			&trade.Quantity, &trade.TradeDate, &trade.StopLoss,
+			&trade.TakeProfit, &trade.Notes, &trade.Screenshot)
+		if err != nil {
+			return nil, errors.New("failed to scan trade row")
+		}
+		trades = append(trades, trade)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.New("error during row iteration")
+	}
+	return trades, nil
+
 }
