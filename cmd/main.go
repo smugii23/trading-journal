@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"trading-journal/config"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -12,7 +13,8 @@ import (
 )
 
 func main() {
-	databaseURL := "postgres://postgres:pass@localhost:5432/postgres?sslmode=disable"
+	config.LoadEnv()
+	databaseURL := config.GetEnv("DATABASE_URL", "")
 	db, err := sql.Open("postgres", databaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to the database: %v\n", err)
