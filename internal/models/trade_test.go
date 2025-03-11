@@ -73,7 +73,7 @@ func TestAddTrade(t *testing.T) {
 }
 
 func TestListTrades(t *testing.T) {
-	dbURL := "postgres://postgres:ds89fyphas@localhost:5432/postgres?sslmode=disable"
+	dbURL := os.Getenv("DATABASE_URL")
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		t.Fatalf("failed to connect to the test database: %v", err)
@@ -129,5 +129,64 @@ func TestListTrades(t *testing.T) {
 
 	if len(trades) != 2 {
 		t.Fatalf("expected 2 trades with min profit 50, got %d", len(trades))
+	}
+}
+
+func TestGetTrade(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to the test database: %v", err)
+	}
+	defer db.Close()
+
+	testTrade := Trade{
+		Ticker:     "ES",
+		EntryPrice: 5500.5,
+		ExitPrice:  5505.5,
+		Quantity:   4,
+		TradeDate:  time.Now(),
+		StopLoss:   5497.5,
+		TakeProfit: 5505.5,
+		Notes:      "5 point scalp",
+		Screenshot: "",
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("failed to start transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	id, err := AddTrade(tx, testTrade)
+	if err != nil {
+		t.Fatalf("failed to add trade: %v", err)
+	}
+	trade, err := GetTrade(tx, id)
+	if err != nil {
+		t.Fatalf("failed to get trade: %v", err)
+	}
+	if trade.Ticker != testTrade.Ticker {
+		t.Errorf("expected ticker %s, got %s", testTrade.Ticker, trade.Ticker)
+	}
+	if trade.EntryPrice != testTrade.EntryPrice {
+		t.Errorf("expected entry price %f, got %f", testTrade.EntryPrice, trade.EntryPrice)
+	}
+	if trade.ExitPrice != testTrade.ExitPrice {
+		t.Errorf("expected exit price %f, got %f", testTrade.ExitPrice, trade.ExitPrice)
+	}
+	if trade.Quantity != testTrade.Quantity {
+		t.Errorf("expected quantity %f, got %f", testTrade.Quantity, trade.Quantity)
+	}
+	if trade.StopLoss != testTrade.StopLoss {
+		t.Errorf("expected stop loss %f, got %f", testTrade.StopLoss, trade.StopLoss)
+	}
+	if trade.TakeProfit != testTrade.TakeProfit {
+		t.Errorf("expected take profit %f, got %f", testTrade.TakeProfit, trade.TakeProfit)
+	}
+	if trade.Notes != testTrade.Notes {
+		t.Errorf("expected notes %s, got %s", testTrade.Notes, trade.Notes)
+	}
+	if trade.Screenshot != testTrade.Screenshot {
+		t.Errorf("expected screenshot %s, got %s", testTrade.Screenshot, trade.Screenshot)
 	}
 }
