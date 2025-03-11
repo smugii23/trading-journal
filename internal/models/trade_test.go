@@ -190,3 +190,49 @@ func TestGetTrade(t *testing.T) {
 		t.Errorf("expected screenshot %s, got %s", testTrade.Screenshot, trade.Screenshot)
 	}
 }
+
+func TestDeleteTrade(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to the test database: %v", err)
+	}
+	defer db.Close()
+
+	testTrade := Trade{
+		Ticker:     "ES",
+		EntryPrice: 5500.5,
+		ExitPrice:  5505.5,
+		Quantity:   4,
+		TradeDate:  time.Now(),
+		StopLoss:   5497.5,
+		TakeProfit: 5505.5,
+		Notes:      "5 point scalp",
+		Screenshot: "",
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("failed to start transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	id, err := AddTrade(tx, testTrade)
+	if err != nil {
+		t.Fatalf("failed to add trade: %v", err)
+	}
+
+	err = DeleteTrade(tx, id)
+	if err != nil {
+		t.Fatalf("failed to delete trade: %v", err)
+	}
+
+	// make sure the trade was deleted
+	var count int
+	err = tx.QueryRow("SELECT COUNT(*) FROM trades WHERE id = $1", id).Scan(&count)
+	if err != nil {
+		t.Fatalf("failed to query trade: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 trades with ID %d, got %d", id, count)
+	}
+}
