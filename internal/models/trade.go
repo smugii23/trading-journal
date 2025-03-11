@@ -166,9 +166,9 @@ func DeleteTrade(db DbExecutor, id int) error {
 }
 
 func UpdateTrade(db DbExecutor, trade Trade) error {
-	stmt, err := db.Prepare("UPDATE trades SET ticker = $1, entry_prce = $2, exit_price = $3, quantity = $4, trade_date = $5, stop_loss = $6, take_profit = $7, notes = $8, screenshot_url = $9 WHERE id = $10")
+	stmt, err := db.Prepare("UPDATE trades SET ticker = $1, entry_price = $2, exit_price = $3, quantity = $4, trade_date = $5, stop_loss = $6, take_profit = $7, notes = $8, screenshot_url = $9 WHERE id = $10")
 	if err != nil {
-		return errors.New("failed to update trade")
+		return errors.New("failed to prepare update statement")
 	}
 	defer stmt.Close()
 	_, err = stmt.Exec(trade.Ticker, trade.EntryPrice, trade.ExitPrice, trade.Quantity, trade.TradeDate, trade.StopLoss, trade.TakeProfit, trade.Notes, trade.Screenshot, trade.ID)

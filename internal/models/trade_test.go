@@ -236,3 +236,93 @@ func TestDeleteTrade(t *testing.T) {
 		t.Errorf("expected 0 trades with ID %d, got %d", id, count)
 	}
 }
+
+func TestUpdateTrade(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		t.Fatalf("failed to connect to the test database: %v", err)
+	}
+	defer db.Close()
+
+	testTrade := Trade{
+		Ticker:     "ES",
+		EntryPrice: 5500.5,
+		ExitPrice:  5505.5,
+		Quantity:   4,
+		TradeDate:  time.Now(),
+		StopLoss:   5497.5,
+		TakeProfit: 5505.5,
+		Notes:      "5 point scalp",
+		Screenshot: "",
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("failed to start transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	id, err := AddTrade(tx, testTrade)
+	if err != nil {
+		t.Fatalf("failed to add trade: %v", err)
+	}
+
+	// update the trade
+	testTrade.ID = id
+	testTrade.Ticker = "NQ"
+	testTrade.EntryPrice = 14000.5
+	testTrade.ExitPrice = 14002.5
+	testTrade.Quantity = 2
+	testTrade.TradeDate = time.Now()
+	testTrade.StopLoss = 13997.5
+	testTrade.TakeProfit = 14002.5
+	testTrade.Notes = "2 point scalp"
+	testTrade.Screenshot = "screenshot.png"
+
+	err = UpdateTrade(tx, testTrade)
+	if err != nil {
+		t.Fatalf("failed to update trade: %v", err)
+	}
+
+	// make sure the trade was updated
+	var count int
+	err = tx.QueryRow("SELECT COUNT(*) FROM trades WHERE id = $1", id).Scan(&count)
+	if err != nil {
+		t.Fatalf("failed to query trade: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 trade with ID %d, got %d", id, count)
+	}
+
+	// get the updated trade
+	trade, err := GetTrade(tx, id)
+	if err != nil {
+		t.Fatalf("failed to get trade: %v", err)
+	}
+
+	// validate the updated trade
+	if trade.Ticker != testTrade.Ticker {
+		t.Errorf("expected ticker %s, got %s", testTrade.Ticker, trade.Ticker)
+	}
+	if trade.EntryPrice != testTrade.EntryPrice {
+		t.Errorf("expected entry price %f, got %f", testTrade.EntryPrice, trade.EntryPrice)
+	}
+	if trade.ExitPrice != testTrade.ExitPrice {
+		t.Errorf("expected exit price %f, got %f", testTrade.ExitPrice, trade.ExitPrice)
+	}
+	if trade.Quantity != testTrade.Quantity {
+		t.Errorf("expected quantity %f, got %f", testTrade.Quantity, trade.Quantity)
+	}
+	if trade.StopLoss != testTrade.StopLoss {
+		t.Errorf("expected stop loss %f, got %f", testTrade.StopLoss, trade.StopLoss)
+	}
+	if trade.TakeProfit != testTrade.TakeProfit {
+		t.Errorf("expected take profit %f, got %f", testTrade.TakeProfit, trade.TakeProfit)
+	}
+	if trade.Notes != testTrade.Notes {
+		t.Errorf("expected notes %s, got %s", testTrade.Notes, trade.Notes)
+	}
+	if trade.Screenshot != testTrade.Screenshot {
+		t.Errorf("expected screenshot %s, got %s", testTrade.Screenshot, trade.Screenshot)
+	}
+}
