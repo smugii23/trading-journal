@@ -41,7 +41,7 @@ type DbExecutor interface {
 	Exec(query string, args ...interface{}) (sql.Result, error)
 }
 
-func addTrade(db DbExecutor, trade Trade) (int, error) {
+func AddTrade(db DbExecutor, trade Trade) (int, error) {
 	stmt, err := db.Prepare("INSERT INTO trades (ticker, entry_price, exit_price, quantity, trade_date, stop_loss, take_profit, notes, screenshot_url) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id")
 	if err != nil {
 		return 0, errors.New("failed to insert trade")
@@ -56,7 +56,7 @@ func addTrade(db DbExecutor, trade Trade) (int, error) {
 	return id, nil
 }
 
-func getTrade(db DbExecutor, id int) (Trade, error) {
+func GetTrade(db DbExecutor, id int) (Trade, error) {
 	var trade Trade
 	stmt, err := db.Prepare(`SELECT id, ticker, entry_price, exit_price, quantity, trade_date, 
         stop_loss, take_profit, notes, screenshot_url
@@ -77,7 +77,7 @@ func getTrade(db DbExecutor, id int) (Trade, error) {
 	}
 	return trade, nil
 }
-func listTrades(db DbExecutor, filter TradeFilter) ([]Trade, error) {
+func ListTrades(db DbExecutor, filter TradeFilter) ([]Trade, error) {
 	// need to get the condition with the ${parameter index number}
 	var conditions []string
 	// also need to get the actual parameter value, []interface{} for flexible variable type
@@ -150,4 +150,30 @@ func listTrades(db DbExecutor, filter TradeFilter) ([]Trade, error) {
 	}
 	return trades, nil
 
+}
+
+func DeleteTrade(db DbExecutor, id int) error {
+	stmt, err := db.Prepare("DELETE FROM trades WHERE id = $1")
+	if err != nil {
+		return errors.New("failed to delete trade")
+	}
+	defer stmt.Close()
+	_, err = stmt.Exec(id)
+	if err != nil {
+		return errors.New("failed to delete trade")
+	}
+	return nil
+}
+
+func UpdateTrade(db DbExecutor, trade Trade) error {
+	stmt, err := db.Prepare("UPDATE trades SET ticker = $1, entry_prce = $2, exit_price = $3, quantity = $4, trade_date = $5, stop_loss = $6, take_profit = $7, notes = $8, screenshot_url = $9 WHERE id = $10")
+	if err != nil {
+		return errors.New("failed to update trade")
+	}
+	defer stmt.Close()
+	_, err = stmt.Exec(trade.Ticker, trade.EntryPrice, trade.ExitPrice, trade.Quantity, trade.TradeDate, trade.StopLoss, trade.TakeProfit, trade.Notes, trade.Screenshot, trade.ID)
+	if err != nil {
+		return errors.New("failed to update trade")
+	}
+	return nil
 }

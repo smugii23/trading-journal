@@ -13,15 +13,17 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	err := godotenv.Load()
+	err := godotenv.Load("../../.env")
 	if err != nil {
-		log.Println("Warning: No .env file found")
+		log.Println("Warning: No .env file found or failed to load it")
 	}
 	os.Exit(m.Run())
 }
 
 func TestAddTrade(t *testing.T) {
-	dbURL := "postgres://postgres:ds89fyphas@localhost:5432/postgres?sslmode=disable"
+	dbURL := os.Getenv("DATABASE_URL")
+	log.Println("DATABASE_URL inside TestAddTrade:", dbURL) // Print here
+
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
@@ -47,7 +49,7 @@ func TestAddTrade(t *testing.T) {
 	}
 
 	// test addTrade function
-	id, err := addTrade(tx, testTrade)
+	id, err := AddTrade(tx, testTrade)
 	if err != nil {
 		t.Fatalf("Failed to add trade: %v", err)
 	}
@@ -78,35 +80,36 @@ func TestListTrades(t *testing.T) {
 	}
 	defer db.Close()
 
+	// open a transaction for the test to rollback
 	tx, err := db.Begin()
 	if err != nil {
 		t.Fatalf("failed to start transaction: %v", err)
 	}
 	defer tx.Rollback()
 
-	// Insert mock trade data
+	// insert test trade data
 	mockTrades := []Trade{
 		{Ticker: "AAPL", EntryPrice: 150.0, ExitPrice: 155.0, Quantity: 10, TradeDate: time.Now(), StopLoss: 145.0, TakeProfit: 160.0, Notes: "Test Trade 1", Screenshot: "screenshot1.png"},
 		{Ticker: "GOOGL", EntryPrice: 2800.0, ExitPrice: 2900.0, Quantity: 5, TradeDate: time.Now(), StopLoss: 2750.0, TakeProfit: 2950.0, Notes: "Test Trade 2", Screenshot: "screenshot2.png"},
 	}
 
 	for _, trade := range mockTrades {
-		_, err := addTrade(tx, trade)
+		_, err := AddTrade(tx, trade)
 		if err != nil {
 			t.Fatalf("failed to insert mock trade: %v", err)
 		}
 	}
 
-	// Test filter: Retrieve only AAPL trades
+	// retrieve only AAPL trades
 	filter := TradeFilter{
 		Ticker: "AAPL",
 	}
-	trades, err := listTrades(tx, filter)
+	trades, err := ListTrades(tx, filter)
 	if err != nil {
 		t.Fatalf("listTrades failed: %v", err)
 	}
 
-	// Validate result
+	// validate result
 	if len(trades) != 1 {
 		t.Fatalf("expected 1 trade, got %d", len(trades))
 	}
@@ -114,12 +117,12 @@ func TestListTrades(t *testing.T) {
 		t.Errorf("expected ticker AAPL, got %s", trades[0].Ticker)
 	}
 
-	// Test Profit Filter
+	// test profit filter
 	minProfit := 50.0
 	filter = TradeFilter{
 		MinProfit: &minProfit,
 	}
-	trades, err = listTrades(tx, filter)
+	trades, err = ListTrades(tx, filter)
 	if err != nil {
 		t.Fatalf("listTrades failed: %v", err)
 	}
