@@ -34,6 +34,13 @@ func main() {
 	// middleware for logging and recovering from panics
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	// define the routes
+	r.Get("/trades", listTradesHandler)
+	r.Post("/trades", addTradeHandler)
+	r.Get("/trades/{id}", getTradeHandler)
+	r.Put("/trades/{id}", updateTradeHandler)
+	r.Delete("/trades/{id}", deleteTradeHandler)
 	// start the server
 	log.Fatal(http.ListenAndServe(":8080", r))
+
 }
