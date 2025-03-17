@@ -4,26 +4,17 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"internal/models"
-	"log"
 	"net/http"
-	"os"
+	"strconv"
+	"trading-journal/internal/models"
 
+	"github.com/go-chi/chi/v5"
 	_ "github.com/lib/pq"
 )
 
 var db *sql.DB
 
-func init() {
-	var err error
-	dbURL := os.Getenv("DATABASE_URL")
-	db, err = sql.Open("postgres", dbURL)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func listTradesHandler(w http.ResponseWriter, r *http.Request) {
+func ListTradesHandler(w http.ResponseWriter, r *http.Request) {
 	// parse the query parameters
 	var filter models.TradeFilter
 	if err := json.NewDecoder(r.Body).Decode(&filter); err != nil {
@@ -43,7 +34,7 @@ func listTradesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func addTradesHandler(w http.ResponseWriter, r *http.Request) {
+func AddTradeHandler(w http.ResponseWriter, r *http.Request) {
 	// check if POST
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -59,10 +50,12 @@ func addTradesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// add the trade
-	if err := trade.AddTrade(db); err != nil {
+	id, err := models.AddTrade(db, trade)
+	if err != nil {
 		http.Error(w, "failed to add trade", http.StatusInternalServerError)
 		return
 	}
+	trade.ID = id
 
 	// set the headers
 	w.Header().Set("Content-Type", "application/json")
@@ -76,16 +69,21 @@ func addTradesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getTradeHandler(w http.ResponseWriter, r *http.Request) {
+func GetTradeHandler(w http.ResponseWriter, r *http.Request) {
 	// get the trade ID
-	id := r.URL.Query().Get("id")
+	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "missing trade ID", http.StatusBadRequest)
 		return
 	}
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		http.Error(w, "invalid trade ID", http.StatusBadRequest)
+		return
+	}
 
 	// get the trade
-	trade, err := models.GetTrade(db, id)
+	trade, err := models.GetTrade(db, idInt)
 	if err != nil {
 		http.Error(w, "failed to get trade", http.StatusInternalServerError)
 		return
@@ -98,9 +96,9 @@ func getTradeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func updateTradeHandler(w http.ResponseWriter, r *http.Request) {
+func UpdateTradeHandler(w http.ResponseWriter, r *http.Request) {
 	// get the trade ID
-	id := r.URL.Query().Get("id")
+	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "missing trade ID", http.StatusBadRequest)
 		return
@@ -113,9 +111,15 @@ func updateTradeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		http.Error(w, "invalid trade ID", http.StatusBadRequest)
+		return
+	}
 
 	// update the trade
-	if err := trade.UpdateTrade(db, id); err != nil {
+	trade.ID = idInt
+	if err := models.UpdateTrade(db, trade); err != nil {
 		http.Error(w, "failed to update trade", http.StatusInternalServerError)
 		return
 	}
@@ -127,16 +131,21 @@ func updateTradeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func deleteTradeHandler(w http.ResponseWriter, r *http.Request) {
+func DeleteTradeHandler(w http.ResponseWriter, r *http.Request) {
 	// get the trade ID
-	id := r.URL.Query().Get("id")
+	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "missing trade ID", http.StatusBadRequest)
 		return
 	}
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		http.Error(w, "invalid trade ID", http.StatusBadRequest)
+		return
+	}
 
 	// delete the trade
-	if err := models.DeleteTrade(db, id); err != nil {
+	if err := models.DeleteTrade(db, idInt); err != nil {
 		http.Error(w, "failed to delete trade", http.StatusInternalServerError)
 		return
 	}

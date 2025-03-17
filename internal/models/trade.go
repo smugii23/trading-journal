@@ -10,28 +10,28 @@ import (
 )
 
 type Trade struct {
-	ID         int
-	Ticker     string
-	EntryPrice float64
-	ExitPrice  float64
-	Quantity   float64
-	TradeDate  time.Time
-	StopLoss   float64
-	TakeProfit float64
-	Notes      string
-	Screenshot string
+	ID         int       `json:"id"`
+	Ticker     string    `json:"ticker"`
+	EntryPrice float64   `json:"entry_price"`
+	ExitPrice  float64   `json:"exit_price"`
+	Quantity   float64   `json:"quantity"`
+	TradeDate  time.Time `json:"trade_date"`
+	StopLoss   float64   `json:"stop_loss"`
+	TakeProfit float64   `json:"take_profit"`
+	Notes      string    `json:"notes"`
+	Screenshot string    `json:"screenshot"`
 }
 
 type TradeFilter struct {
-	StartDate *time.Time
-	EndDate   *time.Time
-	Ticker    string
-	MinProfit *float64
-	MaxProfit *float64
-	Limit     int
-	Offset    int
-	SortBy    string
-	SortDesc  bool
+	StartDate *time.Time `json:"start_date"`
+	EndDate   *time.Time `json:"end_date"`
+	Ticker    string     `json:"ticker"`
+	MinProfit *float64   `json:"min_profit"`
+	MaxProfit *float64   `json:"max_profit"`
+	Limit     int        `json:"limit"`
+	Offset    int        `json:"offset"`
+	SortBy    string     `json:"sort_by"`
+	SortDesc  bool       `json:"sort_desc"`
 }
 
 type DbExecutor interface {
