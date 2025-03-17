@@ -41,7 +41,7 @@ func TestAddTrade(t *testing.T) {
 		EntryPrice: 150.25,
 		ExitPrice:  155.75,
 		Quantity:   10,
-		TradeDate:  time.Now(),
+		TradeDate:  time.Now().Format("2006-01-02 15:04:05"),
 		StopLoss:   145.50,
 		TakeProfit: 155.75,
 		Notes:      "Test trade",
@@ -89,8 +89,8 @@ func TestListTrades(t *testing.T) {
 
 	// insert test trade data
 	mockTrades := []Trade{
-		{Ticker: "AAPL", EntryPrice: 150.0, ExitPrice: 155.0, Quantity: 10, TradeDate: time.Now(), StopLoss: 145.0, TakeProfit: 160.0, Notes: "Test Trade 1", Screenshot: "screenshot1.png"},
-		{Ticker: "GOOGL", EntryPrice: 2800.0, ExitPrice: 2900.0, Quantity: 5, TradeDate: time.Now(), StopLoss: 2750.0, TakeProfit: 2950.0, Notes: "Test Trade 2", Screenshot: "screenshot2.png"},
+		{Ticker: "AAPL", EntryPrice: 150.0, ExitPrice: 155.0, Quantity: 10, TradeDate: time.Now().Format("2006-01-02 15:04:05"), StopLoss: 145.0, TakeProfit: 160.0, Notes: "Test Trade 1", Screenshot: "screenshot1.png"},
+		{Ticker: "GOOGL", EntryPrice: 2800.0, ExitPrice: 2900.0, Quantity: 5, TradeDate: time.Now().Format("2006-01-02 15:04:05"), StopLoss: 2750.0, TakeProfit: 2950.0, Notes: "Test Trade 2", Screenshot: "screenshot2.png"},
 	}
 
 	for _, trade := range mockTrades {
@@ -145,7 +145,7 @@ func TestGetTrade(t *testing.T) {
 		EntryPrice: 5500.5,
 		ExitPrice:  5505.5,
 		Quantity:   4,
-		TradeDate:  time.Now(),
+		TradeDate:  time.Now().Format("2006-01-02 15:04:05"),
 		StopLoss:   5497.5,
 		TakeProfit: 5505.5,
 		Notes:      "5 point scalp",
@@ -204,7 +204,7 @@ func TestDeleteTrade(t *testing.T) {
 		EntryPrice: 5500.5,
 		ExitPrice:  5505.5,
 		Quantity:   4,
-		TradeDate:  time.Now(),
+		TradeDate:  time.Now().Format("2006-01-02 15:04:05"),
 		StopLoss:   5497.5,
 		TakeProfit: 5505.5,
 		Notes:      "5 point scalp",
@@ -250,7 +250,7 @@ func TestUpdateTrade(t *testing.T) {
 		EntryPrice: 5500.5,
 		ExitPrice:  5505.5,
 		Quantity:   4,
-		TradeDate:  time.Now(),
+		TradeDate:  time.Now().Format("2006-01-02 15:04:05"),
 		StopLoss:   5497.5,
 		TakeProfit: 5505.5,
 		Notes:      "5 point scalp",
@@ -273,7 +273,7 @@ func TestUpdateTrade(t *testing.T) {
 	testTrade.EntryPrice = 14000.5
 	testTrade.ExitPrice = 14002.5
 	testTrade.Quantity = 2
-	testTrade.TradeDate = time.Now()
+	testTrade.TradeDate = time.Now().Format("2006-01-02 15:04:05")
 	testTrade.StopLoss = 13997.5
 	testTrade.TakeProfit = 14002.5
 	testTrade.Notes = "2 point scalp"

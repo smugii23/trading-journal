@@ -9,39 +9,41 @@ import (
 	"trading-journal/internal/models"
 
 	"github.com/go-chi/chi/v5"
-	_ "github.com/lib/pq"
 )
 
-var db *sql.DB
+type TradeHandlers struct {
+	db *sql.DB
+}
 
-func ListTradesHandler(w http.ResponseWriter, r *http.Request) {
-	// parse the query parameters
+func NewTradeHandlers(db *sql.DB) *TradeHandlers {
+	return &TradeHandlers{db: db}
+}
+
+func (h *TradeHandlers) ListTradesHandler(w http.ResponseWriter, r *http.Request) {
 	var filter models.TradeFilter
 	if err := json.NewDecoder(r.Body).Decode(&filter); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	// get the trades
-	trades, err := models.ListTrades(db, filter)
+
+	trades, err := models.ListTrades(h.db, filter)
 	if err != nil {
 		http.Error(w, "failed to list trades", http.StatusInternalServerError)
 		return
 	}
-	// return the trades
+
 	if err := json.NewEncoder(w).Encode(trades); err != nil {
 		http.Error(w, "failed to encode trades", http.StatusInternalServerError)
 		return
 	}
 }
 
-func AddTradeHandler(w http.ResponseWriter, r *http.Request) {
-	// check if POST
+func (h *TradeHandlers) AddTradeHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// parse the request body
 	var trade models.Trade
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&trade); err != nil {
@@ -49,28 +51,24 @@ func AddTradeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// add the trade
-	id, err := models.AddTrade(db, trade)
+	id, err := models.AddTrade(h.db, trade)
 	if err != nil {
 		http.Error(w, "failed to add trade", http.StatusInternalServerError)
 		return
 	}
 	trade.ID = id
 
-	// set the headers
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Location", fmt.Sprintf("/trades/%d", trade.ID))
 	w.WriteHeader(http.StatusCreated)
 
-	// return the trade
 	if err := json.NewEncoder(w).Encode(trade); err != nil {
 		http.Error(w, "failed to encode trade", http.StatusInternalServerError)
 		return
 	}
 }
 
-func GetTradeHandler(w http.ResponseWriter, r *http.Request) {
-	// get the trade ID
+func (h *TradeHandlers) GetTradeHandler(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "missing trade ID", http.StatusBadRequest)
@@ -82,29 +80,25 @@ func GetTradeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// get the trade
-	trade, err := models.GetTrade(db, idInt)
+	trade, err := models.GetTrade(h.db, idInt)
 	if err != nil {
 		http.Error(w, "failed to get trade", http.StatusInternalServerError)
 		return
 	}
 
-	// return the trade
 	if err := json.NewEncoder(w).Encode(trade); err != nil {
 		http.Error(w, "failed to encode trade", http.StatusInternalServerError)
 		return
 	}
 }
 
-func UpdateTradeHandler(w http.ResponseWriter, r *http.Request) {
-	// get the trade ID
+func (h *TradeHandlers) UpdateTradeHandler(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "missing trade ID", http.StatusBadRequest)
 		return
 	}
 
-	// parse the request body
 	var trade models.Trade
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&trade); err != nil {
@@ -117,22 +111,19 @@ func UpdateTradeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// update the trade
 	trade.ID = idInt
-	if err := models.UpdateTrade(db, trade); err != nil {
+	if err := models.UpdateTrade(h.db, trade); err != nil {
 		http.Error(w, "failed to update trade", http.StatusInternalServerError)
 		return
 	}
 
-	// return the trade
 	if err := json.NewEncoder(w).Encode(trade); err != nil {
 		http.Error(w, "failed to encode trade", http.StatusInternalServerError)
 		return
 	}
 }
 
-func DeleteTradeHandler(w http.ResponseWriter, r *http.Request) {
-	// get the trade ID
+func (h *TradeHandlers) DeleteTradeHandler(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "missing trade ID", http.StatusBadRequest)
@@ -144,12 +135,10 @@ func DeleteTradeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// delete the trade
-	if err := models.DeleteTrade(db, idInt); err != nil {
+	if err := models.DeleteTrade(h.db, idInt); err != nil {
 		http.Error(w, "failed to delete trade", http.StatusInternalServerError)
 		return
 	}
 
-	// return success
 	w.WriteHeader(http.StatusNoContent)
 }

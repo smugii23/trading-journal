@@ -40,13 +40,14 @@ func main() {
 	// middleware for logging and recovering from panics
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	tradeHandlers := handlers.NewTradeHandlers(db)
 	// define the routes
 	r.Route("/api", func(r chi.Router) {
-		r.Get("/trades", handlers.ListTradesHandler)
-		r.Post("/trades", handlers.AddTradeHandler)
-		r.Get("/trades/{id}", handlers.GetTradeHandler)
-		r.Put("/trades/{id}", handlers.UpdateTradeHandler)
-		r.Delete("/trades/{id}", handlers.DeleteTradeHandler)
+		r.Get("/trades", tradeHandlers.ListTradesHandler)
+		r.Post("/trades", tradeHandlers.AddTradeHandler)
+		r.Get("/trades/{id}", tradeHandlers.GetTradeHandler)
+		r.Put("/trades/{id}", tradeHandlers.UpdateTradeHandler)
+		r.Delete("/trades/{id}", tradeHandlers.DeleteTradeHandler)
 	})
 
 	// create a handler to serve files from /web/static
@@ -55,6 +56,10 @@ func main() {
 	// route for home page/index.html
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "../web/templates/index.html")
+	})
+	// route for adding a trade
+	r.Get("/add_trade.html", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "../web/templates/add_trade.html")
 	})
 	// start the server
 	log.Fatal(http.ListenAndServe(":8080", r))

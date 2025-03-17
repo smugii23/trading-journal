@@ -10,16 +10,16 @@ import (
 )
 
 type Trade struct {
-	ID         int       `json:"id"`
-	Ticker     string    `json:"ticker"`
-	EntryPrice float64   `json:"entry_price"`
-	ExitPrice  float64   `json:"exit_price"`
-	Quantity   float64   `json:"quantity"`
-	TradeDate  time.Time `json:"trade_date"`
-	StopLoss   float64   `json:"stop_loss"`
-	TakeProfit float64   `json:"take_profit"`
-	Notes      string    `json:"notes"`
-	Screenshot string    `json:"screenshot"`
+	ID         int     `json:"id"`
+	Ticker     string  `json:"ticker"`
+	EntryPrice float64 `json:"entry_price"`
+	ExitPrice  float64 `json:"exit_price"`
+	Quantity   float64 `json:"quantity"`
+	TradeDate  string  `json:"trade_date"`
+	StopLoss   float64 `json:"stop_loss"`
+	TakeProfit float64 `json:"take_profit"`
+	Notes      string  `json:"notes"`
+	Screenshot string  `json:"screenshot"`
 }
 
 type TradeFilter struct {

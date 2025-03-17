@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Trade - Trading Journal</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Trading Journal</h1>
+            <nav>
+                <ul>
+                    <li><a href="/">Dashboard</a></li>
+                    <li><a href="/addtrade.html" class="active">Add Trade</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="add-trade-section">
+            <div class="card">
+                <h2>Add New Trade</h2>
+                <form id="add-trade-form">
+                    <div class="form-group">
+                        <label for="ticker">Ticker</label>
+                        <input type="text" id="ticker" name="ticker" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="entry-price">Entry Price</label>
+                        <input type="number" id="entry-price" name="entry_price" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="exit-price">Exit Price</label>
+                        <input type="number" id="exit-price" name="exit_price" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="quantity">Quantity</label>
+                        <input type="number" id="quantity" name="quantity" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="trade-date">Trade Date</label>
+                        <input type="date" id="trade-date" name="trade_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="stop-loss">Stop Loss</label>
+                        <input type="number" id="stop-loss" name="stop_loss" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label for="take-profit">Take Profit</label>
+                        <input type="number" id="take-profit" name="take_profit" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label for="notes">Notes</label>
+                        <textarea id="notes" name="notes" rows="4"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="screenshot">Screenshot URL (optional)</label>
+                        <input type="text" id="screenshot" name="screenshot">
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="submit-btn">Add Trade</button>
+                        <a href="/" class="cancel-btn">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </main>
+
+    <footer class="container">
+        <p>&copy; 2025 Trading Journal</p>
+    </footer>
+
+    <script>
+        // Set default date to today
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('trade-date').valueAsDate = new Date();
+            
+            // Handle form submission
+            document.getElementById('add-trade-form').addEventListener('submit', function(event) {
+                event.preventDefault(); // Prevent default form submission
+                
+                // Gather form data
+                // In your JavaScript form submission
+                const formData = {
+                    ticker: document.getElementById('ticker').value,
+                    entry_price: parseFloat(document.getElementById('entry-price').value),
+                    exit_price: parseFloat(document.getElementById('exit-price').value),
+                    quantity: parseFloat(document.getElementById('quantity').value),
+                    trade_date: document.getElementById('trade-date').value,
+                    stop_loss: document.getElementById('stop-loss').value ? parseFloat(document.getElementById('stop-loss').value) : null,
+                    take_profit: document.getElementById('take-profit').value ? parseFloat(document.getElementById('take-profit').value) : null,
+                    notes: document.getElementById('notes').value || '',
+                    screenshot: document.getElementById('screenshot').value || ''
+                };
+
+                
+                // Send data to API
+                fetch('/api/trades', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                })
+                .then(response => {
+                    if (response.ok) {
+                        // Redirect to dashboard on success
+                        window.location.href = '/';
+                    } else {
+                        return response.text().then(text => {
+                            throw new Error(text || 'Error submitting trade');
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to add trade: ' + error.message);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
