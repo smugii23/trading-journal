@@ -13,27 +13,22 @@ import (
 	"trading-journal/internal/handlers"
 )
 
-var db *sql.DB
-
-func init() {
+func main() {
 	config.LoadEnv()
 	dbURL := config.GetEnv("DATABASE_URL", "")
 	if dbURL == "" {
 		log.Fatal("DATABASE_URL environment variable is not set")
 	}
-	var err error
-	connStr := dbURL
-	db, err = sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// check the connection is alive
-	if err := db.Ping(); err != nil {
-		log.Fatal(err)
-	}
-}
 
-func main() {
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatalf("Database connection failed: %v", err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Database unreachable: %v", err)
+	}
 	// create a new router
 	r := chi.NewRouter()
 
