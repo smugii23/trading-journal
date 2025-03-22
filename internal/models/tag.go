@@ -15,12 +15,12 @@ type Tag struct {
 }
 
 func CreateTag(db *sql.DB, tag *Tag) error {
-	stmt, err := db.Prepare("INSERT INTO tags (user_id, category, color) VALUES ($1, $2, $3) RETURNING id")
+	stmt, err := db.Prepare("INSERT INTO tags (user_id, name, category, color) VALUES ($1, $2, $3, $4) RETURNING id")
 	if err != nil {
 		log.Printf("error creating tag: %v", err)
 		return fmt.Errorf("failed to create tag: %w", err)
 	}
-	err = stmt.QueryRow(tag.UserID, tag.Category, tag.Color).Scan(&tag.ID)
+	err = stmt.QueryRow(tag.UserID, tag.Name, tag.Category, tag.Color).Scan(&tag.ID)
 	if err != nil {
 		log.Printf("error creating tag: %v", err)
 		return fmt.Errorf("failed to create tag: %w", err)
@@ -38,7 +38,7 @@ func GetTagsByUserID(db *sql.DB, userID int) ([]Tag, error) {
 	var tags []Tag
 	for rows.Next() {
 		var t Tag
-		if err := rows.Scan(&t.ID, &t.UserID, &t.Category, &t.Color); err != nil {
+		if err := rows.Scan(&t.ID, &t.UserID, &t.Name, &t.Category, &t.Color); err != nil {
 			return nil, fmt.Errorf("error scanning tag: %w", err)
 		}
 		tags = append(tags, t)
@@ -65,7 +65,7 @@ func RemoveTagFromTrade(db *sql.DB, tradeID, tagID int) error {
 	return nil
 }
 
-func GetTagsFromTrade(db *sql.DB, tradeID int) ([]Tag, error) {
+func GetTagsByTradeID(db *sql.DB, tradeID int) ([]Tag, error) {
 	rows, err := db.Query("SELECT t.id, t.user_id, t.name, t.category, t.color FROM tags t JOIN trade_tags tt ON t.id = tt.tag_id WHERE tt.trade_id = $1", tradeID)
 	if err != nil {
 		return nil, fmt.Errorf("error getting tags: %w", err)
@@ -74,7 +74,7 @@ func GetTagsFromTrade(db *sql.DB, tradeID int) ([]Tag, error) {
 	var tags []Tag
 	for rows.Next() {
 		var t Tag
-		if err := rows.Scan(&t.ID, &t.UserID, &t.Category, &t.Color); err != nil {
+		if err := rows.Scan(&t.ID, &t.UserID, &t.Name, &t.Category, &t.Color); err != nil {
 			return nil, fmt.Errorf("error scanning tag: %w", err)
 		}
 		tags = append(tags, t)
@@ -83,4 +83,20 @@ func GetTagsFromTrade(db *sql.DB, tradeID int) ([]Tag, error) {
 		return nil, fmt.Errorf("error iterating tags: %w", err)
 	}
 	return tags, nil
+}
+
+func UpdateTag(db *sql.DB, tag *Tag) error {
+	_, err := db.Exec("UPDATE tags SET name = $1, category = $2, color = $3 WHERE id = $4 AND user_id = $5", tag.Name, tag.Category, tag.Color, tag.ID, tag.UserID)
+	if err != nil {
+		return fmt.Errorf("error updating tag: %w", err)
+	}
+	return nil
+}
+
+func DeleteTag(db *sql.DB, tagID, userID int) error {
+	_, err := db.Exec("DELETE FROM tags WHERE id = $1 AND user_id = $2", tagID, userID)
+	if err != nil {
+		return fmt.Errorf("error deleting tag: %w", err)
+	}
+	return nil
 }
