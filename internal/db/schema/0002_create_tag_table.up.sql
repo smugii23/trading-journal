@@ -1,7 +1,6 @@
 CREATE TABLE tags (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL, 
-    name VARCHAR(100) NOT NULL,
     category VARCHAR(100),
     color VARCHAR(20),
     UNIQUE(user_id, name)
