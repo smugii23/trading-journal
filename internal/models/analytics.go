@@ -1,15 +1,18 @@
 package models
 
+import "database/sql"
+
 type TradeStats struct {
-	TotalTrades     int     `json:"total_trades"`
-	WinningTrades   int     `json:"winning_trades"`
-	LosingTrades    int     `json:"losing_trades"`
-	TotalProfit     float64 `json:"total_profit"`
-	AverageProfit   float64 `json:"average_profit"`
-	WinRate         float64 `json:"win_rate"`
-	BiggestWin      float64 `json:"biggest_win"`
-	BiggestLoss     float64 `json:"biggest_loss"`
-	AverageWinSize  float64 `json:"average_win_size"`
-	AverageLossSize float64 `json:"average_loss_size"`
-	ProfitFactor    float64 `json:"profit_factor"`
+	TradeID              int     `json:"trade_id"`
+	ProfitLoss           float64 `json:"profit_loss"`
+	ProfitLossPercent    float64 `json:"profit_loss_percent"`
+	RiskRewardRatio      float64 `json:"risk_reward_ratio"`
+	RMultiple            float64 `json:"r_multiple"`
+	HoldingPeriodMinutes int     `json:"holding_period_minutes"`
+	MFE                  float64 `json:"mfe"`
+	MAE                  float64 `json:"mae"`
+}
+
+func GetBasicStats(db *sql.DB, userID int) (TradeStats, error) {
+
 }

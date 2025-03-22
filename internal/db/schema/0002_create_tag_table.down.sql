@@ -1,2 +1,14 @@
-DROP TABLE IF EXISTS tags;
+DROP TABLE IF EXISTS trade_metrics;
+
+ALTER TABLE trades
+  DROP COLUMN IF EXISTS lowest_price,
+  DROP COLUMN IF EXISTS highest_price,
+  DROP COLUMN IF EXISTS commissions,
+  DROP COLUMN IF EXISTS exit_time,
+  DROP COLUMN IF EXISTS entry_time,
+  DROP COLUMN IF EXISTS direction,
+  DROP COLUMN IF EXISTS user_id;
+
 DROP TABLE IF EXISTS trade_tags;
+
+DROP TABLE IF EXISTS tags;
