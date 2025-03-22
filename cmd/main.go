@@ -11,6 +11,9 @@ import (
 
 	"trading-journal/config"
 	"trading-journal/internal/handlers"
+
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/github"
 )
 
 func main() {

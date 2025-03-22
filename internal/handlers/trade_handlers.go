@@ -58,6 +58,12 @@ func (h *TradeHandlers) AddTradeHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	trade.ID = id
 
+	err = models.CalculateAndInsertTradeMetrics(h.db, trade)
+	if err != nil {
+		http.Error(w, "failed to add trade metrics", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Location", fmt.Sprintf("/trades/%d", trade.ID))
 	w.WriteHeader(http.StatusCreated)
