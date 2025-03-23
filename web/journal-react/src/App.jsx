@@ -1,19 +1,39 @@
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import NavBar from './components/NavBar';
-import Header from './components/Header';
+import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import Layout from "./components/Layout";
+import AddTrade from "./components/AddTrades";
 
 function App() {
   return (
-  <Router>
-    <NavBar />
-    <Routes>
-      <Route path="/" element={<Header />}/>
-      <Route path="/trades" element={<div>Trades Page</div>} />
-      <Route path="/add_trade" element={<div>Add Trade Page</div>} />
-      <Route path="/analytics" element={<div>Analytics Page</div>} />
-    </Routes>
-  </Router>
-  )
+    <Router>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <Layout>
+              <div>Home Page</div>
+            </Layout>
+          }
+        />
+        <Route
+          path="/trades"
+          element={
+            <Layout>
+              <div>Trades Page</div>
+            </Layout>
+          }
+        />
+        <Route path="/add_trade" element={<Layout><AddTrade /></Layout>} />
+        <Route
+          path="/analytics"
+          element={
+            <Layout>
+              <div>Analytics Page</div>
+            </Layout>
+          }
+        />
+      </Routes>
+    </Router>
+  );
 }
 
 export default App;

@@ -2,31 +2,33 @@ package models
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"strings"
 	"time"
 )
 
 type Trade struct {
-	ID           int       `json:"id"`
-	UserID       int       `json:"user_id"`
-	Ticker       string    `json:"ticker"`
-	Direction    string    `json:"direction"`
-	EntryPrice   float64   `json:"entry_price"`
-	ExitPrice    float64   `json:"exit_price"`
-	Quantity     float64   `json:"quantity"`
-	TradeDate    time.Time `json:"trade_date"`
-	EntryTime    time.Time `json:"entry_time"`
-	ExitTime     time.Time `json:"exit_time"`
-	StopLoss     *float64  `json:"stop_loss"`
-	TakeProfit   *float64  `json:"take_profit"`
-	Commissions  *float64  `json:"commissions"`
-	HighestPrice *float64  `json:"highest_price"`
-	LowestPrice  *float64  `json:"lowest_price"`
-	Notes        *string   `json:"notes"`
-	Screenshot   *string   `json:"screenshot_url"`
+	ID            int       `json:"id"`
+	UserID        int       `json:"user_id"`
+	Ticker        string    `json:"ticker"`
+	Direction     string    `json:"direction"`
+	EntryPrice    float64   `json:"entry_price"`
+	ExitPrice     float64   `json:"exit_price"`
+	Quantity      float64   `json:"quantity"`
+	TradeDate     time.Time `json:"trade_date"`
+	EntryTime     time.Time `json:"entry_time"`
+	ExitTime      time.Time `json:"exit_time"`
+	StopLoss      *float64  `json:"stop_loss"`
+	TakeProfit    *float64  `json:"take_profit"`
+	Commissions   *float64  `json:"commissions"`
+	HighestPrice  *float64  `json:"highest_price"`
+	LowestPrice   *float64  `json:"lowest_price"`
+	Notes         *string   `json:"notes"`
+	ScreenshotURL *string   `json:"screenshot_url"`
 }
 
 type TradeFilter struct {
@@ -50,8 +52,10 @@ type DbExecutor interface {
 
 func AddTrade(db DbExecutor, trade Trade) (int, error) {
 	stmt, err := db.Prepare(`
-        INSERT INTO trades (user_id, ticker, direction, entry_price, exit_price, quantity, trade_date, entry_time, exit_time, stop_loss, take_profit, commissions, highest_price, lowest_price, notes, screenshot_url)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) 
+        INSERT INTO trades (ticker, direction, entry_price, exit_price, quantity, 
+                        trade_date, entry_time, exit_time, stop_loss, take_profit, 
+                        commissions, highest_price, lowest_price, notes, screenshot_url)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) 
         RETURNING id
     `)
 	if err != nil {
@@ -61,9 +65,9 @@ func AddTrade(db DbExecutor, trade Trade) (int, error) {
 	defer stmt.Close()
 
 	row := stmt.QueryRow(
-		trade.UserID, trade.Ticker, trade.Direction, trade.EntryPrice, trade.ExitPrice, trade.Quantity,
+		trade.Ticker, trade.Direction, trade.EntryPrice, trade.ExitPrice, trade.Quantity,
 		trade.TradeDate, trade.EntryTime, trade.ExitTime, trade.StopLoss, trade.TakeProfit,
-		trade.Commissions, trade.HighestPrice, trade.LowestPrice, trade.Notes, trade.Screenshot,
+		trade.Commissions, trade.HighestPrice, trade.LowestPrice, trade.Notes, trade.ScreenshotURL,
 	)
 
 	var id int
@@ -74,6 +78,93 @@ func AddTrade(db DbExecutor, trade Trade) (int, error) {
 	}
 
 	return id, nil
+}
+
+func CalculateAndInsertTradeMetrics(db *sql.DB, trade Trade) error {
+	if trade.ID == 0 {
+		return errors.New("trade ID is required")
+	}
+
+	// calculating profit/loss
+	var profitLoss float64
+	if trade.Direction == "LONG" {
+		profitLoss = (trade.ExitPrice - trade.EntryPrice) * trade.Quantity
+	} else {
+		profitLoss = (trade.EntryPrice - trade.ExitPrice) * trade.Quantity
+	}
+
+	// commisions
+	if trade.Commissions != nil {
+		profitLoss -= *trade.Commissions
+	}
+
+	// profit/loss based on percentage of capital risked
+	investment := trade.EntryPrice * trade.Quantity
+	profitLossPercent := (profitLoss / investment) * 100
+
+	// holding period in mins
+	holdingPeriod := int(trade.ExitTime.Sub(trade.EntryTime).Minutes())
+
+	// risk-to-reward and r-multiple
+	var riskRewardRatio float64
+	var rMultiple float64
+
+	if trade.StopLoss != nil && *trade.StopLoss > 0 {
+		// risk per share
+		var risk float64
+		if trade.Direction == "LONG" {
+			risk = trade.EntryPrice - *trade.StopLoss
+		} else {
+			risk = *trade.StopLoss - trade.EntryPrice
+		}
+
+		// calculating actual reward per share
+		var reward float64
+		if trade.Direction == "LONG" {
+			reward = trade.ExitPrice - trade.EntryPrice
+		} else {
+			reward = trade.EntryPrice - trade.ExitPrice
+		}
+
+		if risk > 0 {
+			riskRewardRatio = math.Abs(reward / risk)
+			rMultiple = reward / risk
+		}
+	}
+
+	// mfe calculation (how far price moved in your favour)
+	var mfe float64
+	if trade.Direction == "LONG" && trade.HighestPrice != nil {
+		mfe = (*trade.HighestPrice - trade.EntryPrice) * trade.Quantity
+	} else if trade.Direction == "SHORT" && trade.LowestPrice != nil {
+		mfe = (trade.EntryPrice - *trade.LowestPrice) * trade.Quantity
+	}
+
+	// mae calculation (how far price moved against you)
+	var mae float64
+	if trade.Direction == "LONG" && trade.LowestPrice != nil {
+		mae = (trade.EntryPrice - *trade.LowestPrice) * trade.Quantity
+	} else if trade.Direction == "SHORT" && trade.HighestPrice != nil {
+		mae = (*trade.HighestPrice - trade.EntryPrice) * trade.Quantity
+	}
+
+	// Insert metrics into trade_metrics table
+	_, err := db.Exec(`
+		INSERT INTO trade_metrics 
+		(trade_id, profit_loss, profit_loss_percent, risk_reward_ratio, r_multiple, holding_period_minutes, mfe, mae)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (trade_id) 
+		DO UPDATE SET 
+			profit_loss = EXCLUDED.profit_loss,
+			profit_loss_percent = EXCLUDED.profit_loss_percent,
+			risk_reward_ratio = EXCLUDED.risk_reward_ratio,
+			r_multiple = EXCLUDED.r_multiple,
+			holding_period_minutes = EXCLUDED.holding_period_minutes,
+			mfe = EXCLUDED.mfe,
+			mae = EXCLUDED.mae
+	`, trade.ID, profitLoss, profitLossPercent, riskRewardRatio, rMultiple, holdingPeriod, mfe, mae)
+
+	return err
 }
 
 func GetTrade(db DbExecutor, id int) (Trade, error) {
@@ -93,7 +184,7 @@ func GetTrade(db DbExecutor, id int) (Trade, error) {
 	err = row.Scan(
 		&trade.ID, &trade.UserID, &trade.Ticker, &trade.Direction, &trade.EntryPrice, &trade.ExitPrice,
 		&trade.Quantity, &trade.TradeDate, &trade.EntryTime, &trade.ExitTime, &trade.StopLoss, &trade.TakeProfit,
-		&trade.Commissions, &trade.HighestPrice, &trade.LowestPrice, &trade.Notes, &trade.Screenshot,
+		&trade.Commissions, &trade.HighestPrice, &trade.LowestPrice, &trade.Notes, &trade.ScreenshotURL,
 	)
 	if err == sql.ErrNoRows {
 		return trade, fmt.Errorf("trade with ID %d not found", id)
@@ -180,7 +271,7 @@ func ListTrades(db DbExecutor, filter TradeFilter) ([]Trade, error) {
 			&trade.ID, &trade.UserID, &trade.Ticker, &trade.Direction, &trade.EntryPrice, &trade.ExitPrice,
 			&trade.Quantity, &trade.TradeDate, &trade.EntryTime, &trade.ExitTime, &trade.StopLoss,
 			&trade.TakeProfit, &trade.Commissions, &trade.HighestPrice, &trade.LowestPrice,
-			&trade.Notes, &trade.Screenshot,
+			&trade.Notes, &trade.ScreenshotURL,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan trade row: %w", err)
@@ -237,7 +328,7 @@ func UpdateTrade(db DbExecutor, trade Trade) error {
 	_, err = stmt.Exec(
 		trade.Ticker, trade.Direction, trade.EntryPrice, trade.ExitPrice, trade.Quantity,
 		trade.TradeDate, trade.EntryTime, trade.ExitTime, trade.StopLoss, trade.TakeProfit,
-		trade.Commissions, trade.HighestPrice, trade.LowestPrice, trade.Notes, trade.Screenshot,
+		trade.Commissions, trade.HighestPrice, trade.LowestPrice, trade.Notes, trade.ScreenshotURL,
 		trade.ID,
 	)
 	if err != nil {
