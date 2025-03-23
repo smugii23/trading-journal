@@ -4,12 +4,14 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 
-	"trading-journal/config"
 	"trading-journal/internal/handlers"
 
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -17,12 +19,18 @@ import (
 )
 
 func main() {
-	config.LoadEnv()
-	dbURL := config.GetEnv("DATABASE_URL", "")
+	// Load .env file
+	if err := godotenv.Load(); err != nil {
+		log.Println("Warning: No .env file found")
+	}
+
+	// Get DATABASE_URL from environment variables
+	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		log.Fatal("DATABASE_URL environment variable is not set")
 	}
 
+	// Connect to the database
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatalf("Database connection failed: %v", err)
@@ -39,6 +47,15 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	tradeHandlers := handlers.NewTradeHandlers(db)
+	tagHandlers := handlers.NewTagHandlers(db)
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:5173"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 	// define the routes
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/trades", tradeHandlers.ListTradesHandler)
@@ -46,6 +63,16 @@ func main() {
 		r.Get("/trades/{id}", tradeHandlers.GetTradeHandler)
 		r.Put("/trades/{id}", tradeHandlers.UpdateTradeHandler)
 		r.Delete("/trades/{id}", tradeHandlers.DeleteTradeHandler)
+
+		r.Get("/tags", tagHandlers.ListTagsHandler)
+		r.Post("/tags", tagHandlers.CreateTagHandler)
+		r.Get("/tags/{id}", tagHandlers.GetTagHandler)
+		r.Put("/tags/{id}", tagHandlers.UpdateTagHandler)
+		r.Delete("/tags/{id}", tagHandlers.DeleteTagHandler)
+
+		r.Get("/trades/{trade_id}/tags", tagHandlers.GetTradeTagsHandler)
+		r.Post("/trades/{trade_id}/tags/{tag_id}", tagHandlers.AddTagToTradeHandler)
+		r.Delete("/trades/{trade_id}/tags/{tag_id}", tagHandlers.RemoveTagFromTradeHandler)
 	})
 
 	// create a handler to serve files from /web/static
