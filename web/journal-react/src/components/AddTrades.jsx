@@ -34,6 +34,7 @@ const AddTrade = () => {
   const [showTagForm, setShowTagForm] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [errors, setErrors] = useState({});
+  const [isLoading, setIsLoading] = useState(true);
 
   // Form validation
   const validateForm = () => {
@@ -45,6 +46,90 @@ const AddTrade = () => {
     if (!trade.entry_time) errors.entry_time = "Entry time is required";
     setErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  // Fetch tags on component mount
+  useEffect(() => {
+    fetchTags();
+  }, []);
+
+  // Function to fetch tags from the API
+  const fetchTags = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch("http://localhost:8080/api/tags");
+      if (!response.ok) {
+        throw new Error("Failed to fetch tags");
+      }
+      const data = await response.json();
+      setTags(data);
+    } catch (error) {
+      console.error("Error fetching tags:", error);
+      setNotification({
+        show: true,
+        type: "error",
+        message: "Failed to load tags",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle tag selection
+  const handleTagSelect = (tagId) => {
+    setSelectedTags((prev) => {
+      if (prev.includes(tagId)) {
+        return prev.filter((id) => id !== tagId);
+      } else {
+        return [...prev, tagId];
+      }
+    });
+  };
+
+  // Handle new tag submission
+  const handleTagSubmit = async (e) => {
+    e.preventDefault();
+    if (!newTag.name) {
+      setNotification({
+        show: true,
+        type: "error",
+        message: "Tag name is required",
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch("http://localhost:8080/api/tags", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newTag),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create tag");
+      }
+
+      const createdTag = await response.json();
+      setTags([...tags, createdTag]);
+      setSelectedTags([...selectedTags, createdTag.id]);
+      setNewTag({ name: "", category: "", color: "#000000" });
+      setShowTagForm(false);
+      
+      setNotification({
+        show: true,
+        type: "success",
+        message: "Tag created successfully",
+      });
+    } catch (error) {
+      console.error("Error creating tag:", error);
+      setNotification({
+        show: true,
+        type: "error",
+        message: "Failed to create tag",
+      });
+    }
   };
 
   // Calculate profit/loss
@@ -104,7 +189,6 @@ const AddTrade = () => {
     }
   };
 
-
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -120,15 +204,16 @@ const AddTrade = () => {
     setIsUploading(true);
   
     try {
-      // Combine date and time fields into ISO strings
+      
       const tradeDate = new Date(`${trade.trade_date}T${trade.entry_time}:00Z`).toISOString();
       const entryTime = new Date(`${trade.trade_date}T${trade.entry_time}:00Z`).toISOString();
       const exitTime = new Date(`${trade.trade_date}T${trade.exit_time}:00Z`).toISOString();
   
-      // Prepare FormData
       const formData = new FormData();
+      
+      // Add all trade data
       formData.append("ticker", trade.ticker);
-      formData.append("direction", trade.direction.toUpperCase()); // Ensure direction is uppercase
+      formData.append("direction", trade.direction.toUpperCase());
       formData.append("entry_price", trade.entry_price);
       formData.append("exit_price", trade.exit_price);
       formData.append("quantity", trade.quantity);
@@ -141,25 +226,39 @@ const AddTrade = () => {
       formData.append("highest_price", trade.highest_price);
       formData.append("lowest_price", trade.lowest_price);
       formData.append("notes", trade.notes);
-
   
+      // Handle screenshot specially
       if (trade.screenshot) {
-        formData.append("screenshot", trade.screenshot);
+        formData.append("screenshot", trade.screenshot, trade.screenshot.name);
       }
   
-      // Send the request to the correct backend URL
       const response = await fetch("http://localhost:8080/api/trades", {
         method: "POST",
         body: formData,
       });
   
       if (!response.ok) {
-        const errorText = await response.text(); // Log the raw response
+        const errorText = await response.text();
         console.error("Backend error:", errorText);
         throw new Error("Failed to submit trade");
       }
   
       const result = await response.json();
+      
+      // Add selected tags to the newly created trade
+      if (selectedTags.length > 0) {
+        const tradeId = result.id;
+        for (const tagId of selectedTags) {
+          try {
+            await fetch(`http://localhost:8080/api/trades/${tradeId}/tags/${tagId}`, {
+              method: "POST",
+            });
+          } catch (tagError) {
+            console.error(`Error adding tag ${tagId} to trade:`, tagError);
+          }
+        }
+      }
+      
       setNotification({
         show: true,
         type: "success",
@@ -201,6 +300,7 @@ const AddTrade = () => {
     setPreviewUrl(null);
     setProfit(null);
     setErrors({});
+    setSelectedTags([]);
   };
 
   // Confirmation modal for reset
@@ -209,6 +309,10 @@ const AddTrade = () => {
     resetForm();
     setShowResetModal(false);
   };
+
+  if (isLoading) {
+    return <div>Loading trade form...</div>;
+  }
 
   return (
     <div className="max-w-5xl mx-auto mt-10 p-6 bg-white rounded-lg shadow">
@@ -462,6 +566,7 @@ const AddTrade = () => {
             />
           </div>
         </div>
+        
 
         {/* Profit/Loss Calculator */}
         {profit !== null && (
@@ -473,6 +578,108 @@ const AddTrade = () => {
             </p>
           </div>
         )}
+
+        {/* Tags Section - Add this before the Notes section */}
+        <div className="mb-4">
+          <label className="block text-gray-700 mb-2">Tags</label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {tags.length === 0 && !isLoading ? (
+              <span className="text-gray-500">No tags available</span>
+            ) : (
+              tags.map((tag) => (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => handleTagSelect(tag.id)}
+                  className={`px-3 py-1 rounded-full text-sm flex items-center ${
+                    selectedTags.includes(tag.id)
+                      ? "bg-gray-700 text-white"
+                      : "bg-gray-200 text-gray-800"
+                  }`}
+                  style={{
+                    backgroundColor: selectedTags.includes(tag.id) ? tag.color : "#f3f4f6",
+                    color: selectedTags.includes(tag.id) ? "#ffffff" : "#1f2937",
+                  }}
+                >
+                  {tag.name}
+                  {selectedTags.includes(tag.id) && (
+                    <Check className="ml-1" size={14} />
+                  )}
+                </button>
+              ))
+            )}
+            <button
+              type="button"
+              onClick={() => setShowTagForm(!showTagForm)}
+              className="px-3 py-1 rounded-full bg-gray-200 text-gray-800 text-sm flex items-center"
+            >
+              <Plus size={14} className="mr-1" /> New Tag
+            </button>
+          </div>
+
+          {/* New Tag Form */}
+          {showTagForm && (
+            <div className="p-3 border border-gray-300 rounded mb-3">
+              <h4 className="font-bold mb-2">Create New Tag</h4>
+              <div className="grid grid-cols-3 gap-2 mb-2">
+                <div>
+                  <label htmlFor="tagName" className="block text-sm text-gray-700">
+                    Name
+                  </label>
+                  <input
+                    id="tagName"
+                    type="text"
+                    value={newTag.name}
+                    onChange={(e) => setNewTag({ ...newTag, name: e.target.value })}
+                    className="w-full p-2 border border-gray-300 rounded mt-1 text-sm"
+                    placeholder="Tag name"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="tagCategory" className="block text-sm text-gray-700">
+                    Category
+                  </label>
+                  <input
+                    id="tagCategory"
+                    type="text"
+                    value={newTag.category}
+                    onChange={(e) => setNewTag({ ...newTag, category: e.target.value })}
+                    className="w-full p-2 border border-gray-300 rounded mt-1 text-sm"
+                    placeholder="Category (optional)"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="tagColor" className="block text-sm text-gray-700">
+                    Color
+                  </label>
+                  <input
+                    id="tagColor"
+                    type="color"
+                    value={newTag.color}
+                    onChange={(e) => setNewTag({ ...newTag, color: e.target.value })}
+                    className="w-full p-1 h-10 border border-gray-300 rounded mt-1"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowTagForm(false)}
+                  className="px-3 py-1 bg-gray-200 text-gray-800 rounded mr-2 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTagSubmit}
+                  className="px-3 py-1 bg-black text-white rounded text-sm"
+                >
+                  Add Tag
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Notes */}
         <div className="mb-4">

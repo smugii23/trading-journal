@@ -3,8 +3,10 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -57,7 +59,28 @@ func (h *TradeHandlers) AddTradeHandler(w http.ResponseWriter, r *http.Request) 
 	file, handler, err := r.FormFile("screenshot")
 	if err == nil {
 		defer file.Close()
-		// Save the file and set the screenshot URL in the trade object
+
+		// Create the uploads directory if it doesn't exist
+		if err := os.MkdirAll("uploads", 0755); err != nil {
+			http.Error(w, `{"error": "failed to create upload directory"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Create a new file in the uploads directory
+		dst, err := os.Create("uploads/" + handler.Filename)
+		if err != nil {
+			http.Error(w, `{"error": "failed to create destination file"}`, http.StatusInternalServerError)
+			return
+		}
+		defer dst.Close()
+
+		// Copy the uploaded file to the destination file
+		if _, err := io.Copy(dst, file); err != nil {
+			http.Error(w, `{"error": "failed to save uploaded file"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Set the screenshot URL in the trade object
 		trade.ScreenshotURL = stringPtr("/uploads/" + handler.Filename)
 	} else if err != http.ErrMissingFile {
 		http.Error(w, `{"error": "failed to process screenshot"}`, http.StatusBadRequest)
