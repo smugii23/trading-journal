@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"trading-journal/internal/models"
@@ -22,14 +23,17 @@ func NewTagHandlers(db *sql.DB) *TagHandlers {
 func (h *TagHandlers) CreateTagHandler(w http.ResponseWriter, r *http.Request) {
 	var tag models.Tag
 	if err := json.NewDecoder(r.Body).Decode(&tag); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		log.Printf("Error decoding request body: %v", err)
+		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	log.Printf("Received tag creation request: %+v", tag)
 
 	// in the future, i'll implement user auth. for now, i'll just use 1 as userid
 	tag.UserID = 1
 
 	if err := models.CreateTag(h.db, &tag); err != nil {
+		log.Printf("Error creating tag in database: %v", err)
 		http.Error(w, "Failed to create tag: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -37,7 +41,8 @@ func (h *TagHandlers) CreateTagHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(tag); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		log.Printf("Error encoding response: %v", err)
+		http.Error(w, "Failed to encode response: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 }

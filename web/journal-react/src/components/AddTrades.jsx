@@ -1,6 +1,33 @@
 import { useState, useEffect } from "react";
 import { Camera, AlertTriangle, CheckCircle, Tag, Plus, Check, Edit2, Trash } from "lucide-react";
 
+const predefinedColors = [
+  // Blues
+  "#2563eb", // Blue
+  "#0891b2", // Cyan
+  "#0ea5e9", // Sky Blue
+  
+  // Greens
+  "#16a34a", // Green
+  "#059669", // Emerald
+  "#65a30d", // Lime
+
+  // Warm colors
+  "#dc2626", // Red
+  "#ea580c", // Orange
+  "#d97706", // Amber
+  "#ca8a04", // Yellow
+
+  // Purples/Pinks
+  "#9333ea", // Purple
+  "#c026d3", // Fuchsia
+  "#db2777", // Pink
+
+  // Neutrals
+  "#525252", // Gray
+  "#44403c", // Stone
+];
+
 const AddTrade = () => {
   const [trade, setTrade] = useState({
     ticker: "",
@@ -34,7 +61,7 @@ const AddTrade = () => {
   const [showTagForm, setShowTagForm] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [errors, setErrors] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Form validation
   const validateForm = () => {
@@ -48,32 +75,43 @@ const AddTrade = () => {
     return Object.keys(errors).length === 0;
   };
 
-  // Fetch tags on component mount
+  // Modify the useEffect for fetching tags
   useEffect(() => {
-    fetchTags();
-  }, []);
+    let mounted = true;
 
-  // Function to fetch tags from the API
-  const fetchTags = async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch("http://localhost:8080/api/tags");
-      if (!response.ok) {
-        throw new Error("Failed to fetch tags");
+    const fetchTags = async () => {
+      if (!mounted) return;
+      
+      setIsLoading(true);
+      try {
+        const response = await fetch("http://localhost:8080/api/tags");
+        if (!response.ok) {
+          throw new Error("Failed to fetch tags");
+        }
+        if (mounted) {
+          const data = await response.json();
+          console.log("Tags data:", data); // Debug logging
+          setTags(Array.isArray(data) ? data : []); // Ensure it's always an array
+        }
+      } catch (error) {
+        if (mounted) {
+          console.error("Error fetching tags:", error);
+          setTags([]); // Always set to empty array on error
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
-      const data = await response.json();
-      setTags(data);
-    } catch (error) {
-      console.error("Error fetching tags:", error);
-      setNotification({
-        show: true,
-        type: "error",
-        message: "Failed to load tags",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
+
+    fetchTags();
+
+    // Cleanup function to prevent state updates after unmounting
+    return () => {
+      mounted = false;
+    };
+  }, []); // Empty dependency array means this runs once on mount
 
   // Handle tag selection
   const handleTagSelect = (tagId) => {
@@ -99,6 +137,9 @@ const AddTrade = () => {
     }
 
     try {
+      // Log the payload we're sending
+      console.log("Sending tag data:", JSON.stringify(newTag, null, 2));
+      
       const response = await fetch("http://localhost:8080/api/tags", {
         method: "POST",
         headers: {
@@ -107,13 +148,30 @@ const AddTrade = () => {
         body: JSON.stringify(newTag),
       });
 
+      // If there's an error, try to get the detailed error message
       if (!response.ok) {
-        throw new Error("Failed to create tag");
+        const errorText = await response.text();
+        console.error("Server error response:", errorText);
+        throw new Error(`Failed to create tag: ${errorText || response.statusText}`);
       }
 
-      const createdTag = await response.json();
-      setTags([...tags, createdTag]);
-      setSelectedTags([...selectedTags, createdTag.id]);
+      // Parse the response text
+      let createdTag;
+      try {
+        createdTag = JSON.parse(await response.text());
+      } catch (parseError) {
+        console.error("Error parsing tag response:", parseError);
+        throw new Error("Invalid response format");
+      }
+
+      // Ensure tags is always an array before spreading
+      const currentTags = Array.isArray(tags) ? tags : [];
+      setTags([...currentTags, createdTag]);
+      
+      // Also ensure selectedTags is an array
+      const currentSelectedTags = Array.isArray(selectedTags) ? selectedTags : [];
+      setSelectedTags([...currentSelectedTags, createdTag.id]);
+      
       setNewTag({ name: "", category: "", color: "#000000" });
       setShowTagForm(false);
       
@@ -127,7 +185,7 @@ const AddTrade = () => {
       setNotification({
         show: true,
         type: "error",
-        message: "Failed to create tag",
+        message: error.message || "Failed to create tag",
       });
     }
   };
@@ -309,10 +367,6 @@ const AddTrade = () => {
     resetForm();
     setShowResetModal(false);
   };
-
-  if (isLoading) {
-    return <div>Loading trade form...</div>;
-  }
 
   return (
     <div className="max-w-5xl mx-auto mt-10 p-6 bg-white rounded-lg shadow">
@@ -579,14 +633,16 @@ const AddTrade = () => {
           </div>
         )}
 
-        {/* Tags Section - Add this before the Notes section */}
+        {/* Tags Section */}
         <div className="mb-4">
           <label className="block text-gray-700 mb-2">Tags</label>
           <div className="flex flex-wrap gap-2 mb-2">
-            {tags.length === 0 && !isLoading ? (
+            {isLoading ? (
+              <span className="text-gray-500">Loading tags...</span>
+            ) : (tags?.length === 0) ? (
               <span className="text-gray-500">No tags available</span>
             ) : (
-              tags.map((tag) => (
+              tags?.map((tag) => (
                 <button
                   key={tag.id}
                   type="button"
@@ -606,7 +662,7 @@ const AddTrade = () => {
                     <Check className="ml-1" size={14} />
                   )}
                 </button>
-              ))
+              )) || <span className="text-gray-500">No tags available</span>
             )}
             <button
               type="button"
@@ -652,13 +708,20 @@ const AddTrade = () => {
                   <label htmlFor="tagColor" className="block text-sm text-gray-700">
                     Color
                   </label>
-                  <input
-                    id="tagColor"
-                    type="color"
-                    value={newTag.color}
-                    onChange={(e) => setNewTag({ ...newTag, color: e.target.value })}
-                    className="w-full p-1 h-10 border border-gray-300 rounded mt-1"
-                  />
+                  <div className="mt-1 grid grid-cols-5 gap-2">
+                    {predefinedColors.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => setNewTag({ ...newTag, color })}
+                        className={`w-full h-8 rounded-md border ${
+                          newTag.color === color ? 'ring-2 ring-offset-2 ring-black' : 'border-gray-300'
+                        }`}
+                        style={{ backgroundColor: color }}
+                        aria-label={`Select color ${color}`}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
               <div className="flex justify-end">

@@ -78,14 +78,7 @@ func main() {
 	// create a handler to serve files from /web/static
 	fileServer := http.FileServer(http.Dir("../web/static"))
 	r.Handle("/static/*", http.StripPrefix("/static", fileServer))
-	// route for home page/index.html
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "../web/templates/index.html")
-	})
-	// route for adding a trade
-	r.Get("/add_trade.html", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "../web/templates/add_trade.html")
-	})
+
 	// start the server
 	log.Fatal(http.ListenAndServe(":8080", r))
 
