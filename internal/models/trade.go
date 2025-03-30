@@ -51,7 +51,7 @@ type DbExecutor interface {
 }
 
 func AddTrade(db DbExecutor, trade Trade) (int, error) {
-	// Prepare the SQL statement
+	// prepare the SQL statement to insert the trade
 	stmt, err := db.Prepare(`
         INSERT INTO trades (
             ticker, direction, entry_price, exit_price, quantity, 
@@ -65,11 +65,6 @@ func AddTrade(db DbExecutor, trade Trade) (int, error) {
 		return 0, fmt.Errorf("failed to prepare insert statement: %w", err)
 	}
 	defer stmt.Close()
-
-	// Log the trade object for debugging
-	log.Printf("Inserting trade: %+v", trade)
-
-	// Execute the SQL statement
 	row := stmt.QueryRow(
 		trade.Ticker, trade.Direction, trade.EntryPrice, trade.ExitPrice, trade.Quantity,
 		trade.TradeDate, trade.EntryTime, trade.ExitTime,
@@ -77,8 +72,7 @@ func AddTrade(db DbExecutor, trade Trade) (int, error) {
 		trade.HighestPrice, trade.LowestPrice, trade.Notes, trade.ScreenshotURL,
 		1,
 	)
-
-	// Scan the returned ID
+	// scan the returned id
 	var id int
 	err = row.Scan(&id)
 	if err != nil {
@@ -94,10 +88,10 @@ func CalculateAndInsertTradeMetrics(db *sql.DB, trade Trade) error {
 		return errors.New("trade ID is required")
 	}
 
-	// Ensure direction is uppercase for case-insensitive comparison
+	// make sure direction is uppercase for case-insensitive comparison
 	direction := strings.ToUpper(trade.Direction)
 
-	// Calculate profit/loss
+	// calculate profit/loss
 	var profitLoss float64
 	switch direction {
 	case "LONG":
@@ -108,25 +102,26 @@ func CalculateAndInsertTradeMetrics(db *sql.DB, trade Trade) error {
 		return fmt.Errorf("invalid trade direction: %s", trade.Direction)
 	}
 
-	// Deduct commissions (if provided)
+	// deduct commissions (if provided)
 	if trade.Commissions != nil {
 		profitLoss -= *trade.Commissions
 	}
 
-	// Calculate profit/loss percentage
+	// calculate profit/loss in a percentage
 	investment := trade.EntryPrice * trade.Quantity
 	var profitLossPercent float64
 	if investment != 0 {
 		profitLossPercent = (profitLoss / investment) * 100
 	}
 
-	// Calculate holding period in minutes
+	// calculate holding period in minutes
 	holdingPeriod := int(trade.ExitTime.Sub(trade.EntryTime).Minutes())
 
-	// Calculate risk-to-reward ratio and R-multiple
+	// calculate risk-to-reward ratio and R-multiple
 	var riskRewardRatio float64
 	var rMultiple float64
 	if trade.StopLoss != nil && *trade.StopLoss > 0 {
+		// calculate risk by subtracting the stop loss from the entry price
 		var risk float64
 		switch direction {
 		case "LONG":
@@ -135,6 +130,7 @@ func CalculateAndInsertTradeMetrics(db *sql.DB, trade Trade) error {
 			risk = *trade.StopLoss - trade.EntryPrice
 		}
 
+		// calculate reward by subtracting the exit price from the entry price
 		var reward float64
 		switch direction {
 		case "LONG":
@@ -143,13 +139,15 @@ func CalculateAndInsertTradeMetrics(db *sql.DB, trade Trade) error {
 			reward = trade.EntryPrice - trade.ExitPrice
 		}
 
+		// if risk is greater than 0, calculate the risk-to-reward ratio and R-multiple
 		if risk > 0 {
 			riskRewardRatio = math.Abs(reward / risk)
 			rMultiple = reward / risk
 		}
 	}
 
-	// Calculate MFE (Maximum Favorable Excursion)
+	// calculate MFE (Maximum Favorable Excursion)
+	// how far the trade went in the positive direction (depends on long or short trade)
 	var mfe float64
 	if direction == "LONG" && trade.HighestPrice != nil {
 		mfe = (*trade.HighestPrice - trade.EntryPrice) * trade.Quantity
@@ -157,7 +155,8 @@ func CalculateAndInsertTradeMetrics(db *sql.DB, trade Trade) error {
 		mfe = (trade.EntryPrice - *trade.LowestPrice) * trade.Quantity
 	}
 
-	// Calculate MAE (Maximum Adverse Excursion)
+	// calculate MAE (Maximum Adverse Excursion)
+	// how far the trade went in the negative direction (depends on long or short trade)
 	var mae float64
 	if direction == "LONG" && trade.LowestPrice != nil {
 		mae = (trade.EntryPrice - *trade.LowestPrice) * trade.Quantity
@@ -165,13 +164,14 @@ func CalculateAndInsertTradeMetrics(db *sql.DB, trade Trade) error {
 		mae = (*trade.HighestPrice - trade.EntryPrice) * trade.Quantity
 	}
 
-	// Insert or update metrics in the trade_metrics table
+	// insert or update metrics we calculated into the trade_metrics table
 	_, err := db.Exec(`
         INSERT INTO trade_metrics 
         (trade_id, profit_loss, profit_loss_percent, risk_reward_ratio, r_multiple, holding_period_minutes, mfe, mae)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (trade_id) 
+        ON CONFLICT (trade_id)  -- if there is an existing row with the same trade_id, update the row
         DO UPDATE SET 
+			-- use EXCLUDED to the values that are being updated
             profit_loss = EXCLUDED.profit_loss,
             profit_loss_percent = EXCLUDED.profit_loss_percent,
             risk_reward_ratio = EXCLUDED.risk_reward_ratio,
@@ -185,10 +185,10 @@ func CalculateAndInsertTradeMetrics(db *sql.DB, trade Trade) error {
 		log.Printf("Error inserting/updating trade metrics: %v", err)
 		return fmt.Errorf("failed to insert/update trade metrics: %w", err)
 	}
-
 	return nil
 }
 
+// get a trade by id
 func GetTrade(db DbExecutor, id int) (Trade, error) {
 	var trade Trade
 	stmt, err := db.Prepare(`

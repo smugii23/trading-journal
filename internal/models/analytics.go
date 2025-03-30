@@ -37,9 +37,12 @@ func GetBasicStats(db *sql.DB, userID int) (AggregateTradeStats, error) {
 	err = db.QueryRow(`
 		SELECT 
 			COUNT(*) as total_trades,
+			-- if profit_loss is greater than 0, it's a winning trade
 			COUNT(CASE WHEN tm.profit_loss > 0 THEN 1 END) as winning_trades,
+			-- if profit_loss is less than or equal to 0, it's a losing trade
 			COUNT(CASE WHEN tm.profit_loss <= 0 THEN 1 END) as losing_trades
 		FROM trades t
+		-- only for user selected
 		JOIN trade_metrics tm ON t.id = tm.trade_id
 		WHERE t.user_id = $1
 	`, userID).Scan(&stats.TotalTrades, &stats.WinningTrades, &stats.LosingTrades)
@@ -81,9 +84,11 @@ func GetBasicStats(db *sql.DB, userID int) (AggregateTradeStats, error) {
 	// find biggest winner and loser
 	err = db.QueryRow(`
 		SELECT 
+			-- use coalesce to handle null values
 			COALESCE(MAX(tm.profit_loss), 0) as largest_winner,
 			COALESCE(MIN(tm.profit_loss), 0) as largest_loser
 		FROM trades t
+		-- only for user selected
 		JOIN trade_metrics tm ON t.id = tm.trade_id
 		WHERE t.user_id = $1
 	`, userID).Scan(&stats.LargestWinner, &stats.LargestLoser)
@@ -92,12 +97,17 @@ func GetBasicStats(db *sql.DB, userID int) (AggregateTradeStats, error) {
 	}
 
 	// calculate profit factor
+	// profit factor is the ratio of total profit to total loss
 	err = db.QueryRow(`
 		SELECT 
 			CASE 
+				-- if there are losses, calculate profit factor
 				WHEN SUM(CASE WHEN tm.profit_loss < 0 THEN ABS(tm.profit_loss) ELSE 0 END) > 0 
 				THEN SUM(CASE WHEN tm.profit_loss > 0 THEN tm.profit_loss ELSE 0 END) / 
-					 SUM(CASE WHEN tm.profit_loss < 0 THEN ABS(tm.profit_loss) ELSE 0 END)
+					SUM(CASE WHEN tm.profit_loss < 0 THEN ABS(tm.profit_loss) ELSE 0 END)
+				-- if no losses but have gains, return a high number to handle division by zero
+				WHEN SUM(CASE WHEN tm.profit_loss > 0 THEN tm.profit_loss ELSE 0 END) > 0
+				THEN 999.99
 				ELSE 0
 			END as profit_factor
 		FROM trades t
@@ -111,49 +121,79 @@ func GetBasicStats(db *sql.DB, userID int) (AggregateTradeStats, error) {
 	// calculate expectancy
 	stats.ExpectancyPerTrade = (stats.WinRate * stats.AverageWinner) + ((1 - stats.WinRate) * stats.AverageLoser)
 
-	// find the current streak
+	// find if latest trade is a win or loss
+	var isLatestTradeWin bool
 	err = db.QueryRow(`
-		WITH ranked_trades AS (
-			SELECT 
-				tm.profit_loss,
-				ROW_NUMBER() OVER (ORDER BY t.exit_time DESC) as row_num
-			FROM trades t
-			JOIN trade_metrics tm ON t.id = tm.trade_id
-			WHERE t.user_id = $1
-			ORDER BY t.exit_time DESC
-		)
-		SELECT 
-			(SELECT COUNT(*) 
-			 FROM ranked_trades 
-			 WHERE row_num <= (SELECT MIN(row_num) FROM ranked_trades WHERE profit_loss * (SELECT SIGN(profit_loss) FROM ranked_trades WHERE row_num = 1) <= 0)
-			 AND profit_loss * (SELECT SIGN(profit_loss) FROM ranked_trades WHERE row_num = 1) > 0) 
-			* SIGN((SELECT profit_loss FROM ranked_trades WHERE row_num = 1)) as current_streak
-		FROM ranked_trades
+		SELECT profit_loss > 0
+		FROM trades t
+		JOIN trade_metrics tm ON t.id = tm.trade_id
+		WHERE t.user_id = $1
+		ORDER BY t.exit_time DESC
 		LIMIT 1
-	`, userID).Scan(&stats.CurrentStreak)
+	`, userID).Scan(&isLatestTradeWin)
+
 	if err != nil {
 		return stats, err
 	}
 
+	// find streak length
+	err = db.QueryRow(`
+		WITH ranked_trades AS (
+			SELECT 
+				tm.profit_loss > 0 as is_win, -- true if profit_loss is greater than 0 (winning trade)
+				ROW_NUMBER() OVER (ORDER BY t.exit_time DESC) as row_num  -- numbers trades from newest to oldest
+			FROM trades t
+			JOIN trade_metrics tm ON t.id = tm.trade_id
+			WHERE t.user_id = $1
+			ORDER BY t.exit_time DESC
+		),
+		-- get the win/loss of the first trade
+		first_trade AS (
+			SELECT is_win FROM ranked_trades WHERE row_num = 1
+		),
+		-- count the number of trades in a row with the same win/loss
+		SELECT COUNT(*)
+		FROM ranked_trades r, first_trade f
+		-- check if first trade aligns with the streak
+		WHERE r.is_win = f.is_win
+		AND r.row_num <= (
+			SELECT MIN(r2.row_num) - 1
+			FROM ranked_trades r2, first_trade f
+			WHERE r2.is_win != f.is_win
+			AND r2.row_num > 1
+		)
+	`, userID).Scan(&stats.CurrentStreak)
+
+	// apply sign based on win/loss
+	if !isLatestTradeWin {
+		stats.CurrentStreak = -stats.CurrentStreak
+	}
+
 	// calculate max drawdown
+	// 1. calculate the running balance
+	// 2. find the peak balance
+	// 3. calculate the drawdown as a percentage of the peak balance
 	rows, err := db.Query(`
+		-- find running balance by summing up the profit_loss of each trade
 		WITH running_balance AS (
 			SELECT 
 				t.exit_time,
 				tm.profit_loss,
-				SUM(tm.profit_loss) OVER (ORDER BY t.exit_time) as balance
+				SUM(tm.profit_loss) OVER (ORDER BY t.exit_time) as balance  -- use OVER to calculate the running total at each trade
 			FROM trades t
 			JOIN trade_metrics tm ON t.id = tm.trade_id
 			WHERE t.user_id = $1
 			ORDER BY t.exit_time
 		),
+		-- find the peak balance
 		peaks AS (
 			SELECT 
 				exit_time,
 				balance,
 				MAX(balance) OVER (ORDER BY exit_time) as peak
 			FROM running_balance
-		)
+		),
+		-- calculate the drawdown as a percentage of the peak balance
 		SELECT 
 			(peak - balance) / NULLIF(peak, 0) * 100 as drawdown_percent
 		FROM peaks

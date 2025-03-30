@@ -24,7 +24,7 @@ func main() {
 		log.Println("Warning: No .env file found")
 	}
 
-	// Get DATABASE_URL from environment variables
+	// get DATABASE_URL from environment variables
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		log.Fatal("DATABASE_URL environment variable is not set")
@@ -48,6 +48,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 	tradeHandlers := handlers.NewTradeHandlers(db)
 	tagHandlers := handlers.NewTagHandlers(db)
+	statisticsHandlers := handlers.NewStatisticsHandlers(db)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:5173"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -73,11 +74,9 @@ func main() {
 		r.Get("/trades/{trade_id}/tags", tagHandlers.GetTradeTagsHandler)
 		r.Post("/trades/{trade_id}/tags/{tag_id}", tagHandlers.AddTagToTradeHandler)
 		r.Delete("/trades/{trade_id}/tags/{tag_id}", tagHandlers.RemoveTagFromTradeHandler)
-	})
 
-	// create a handler to serve files from /web/static
-	fileServer := http.FileServer(http.Dir("../web/static"))
-	r.Handle("/static/*", http.StripPrefix("/static", fileServer))
+		r.Get("/statistics", statisticsHandlers.GetStatisticsHandler)
+	})	
 
 	// start the server
 	log.Fatal(http.ListenAndServe(":8080", r))

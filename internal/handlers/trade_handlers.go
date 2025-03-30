@@ -24,20 +24,20 @@ func NewTradeHandlers(db *sql.DB) *TradeHandlers {
 }
 
 func (h *TradeHandlers) AddTradeHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse multipart form data
+	// parse multipart form data
 	if err := r.ParseMultipartForm(10 << 20); err != nil { // 10 MB max
 		http.Error(w, `{"error": "failed to parse form data"}`, http.StatusBadRequest)
 		return
 	}
 
-	// Extract and convert direction to uppercase
+	// extract and convert direction to uppercase
 	direction := strings.ToUpper(r.FormValue("direction"))
 	if direction != "LONG" && direction != "SHORT" {
 		http.Error(w, `{"error": "direction must be LONG or SHORT"}`, http.StatusBadRequest)
 		return
 	}
 
-	// Extract trade data from form
+	// extract trade data from form
 	trade := models.Trade{
 		Ticker:       r.FormValue("ticker"),
 		Direction:    direction,
@@ -55,18 +55,18 @@ func (h *TradeHandlers) AddTradeHandler(w http.ResponseWriter, r *http.Request) 
 		Notes:        stringPtr(r.FormValue("notes")),
 	}
 
-	// Handle file upload
+	// if the user uploads a screenshot, handle it. in the future, i'm planning to use AWS S3 for this
 	file, handler, err := r.FormFile("screenshot")
 	if err == nil {
 		defer file.Close()
 
-		// Create the uploads directory if it doesn't exist
+		// create the uploads directory if it doesn't exist
 		if err := os.MkdirAll("uploads", 0755); err != nil {
 			http.Error(w, `{"error": "failed to create upload directory"}`, http.StatusInternalServerError)
 			return
 		}
 
-		// Create a new file in the uploads directory
+		// create a new file in the uploads directory
 		dst, err := os.Create("uploads/" + handler.Filename)
 		if err != nil {
 			http.Error(w, `{"error": "failed to create destination file"}`, http.StatusInternalServerError)
@@ -74,20 +74,20 @@ func (h *TradeHandlers) AddTradeHandler(w http.ResponseWriter, r *http.Request) 
 		}
 		defer dst.Close()
 
-		// Copy the uploaded file to the destination file
+		// copy the uploaded file to the destination file
 		if _, err := io.Copy(dst, file); err != nil {
 			http.Error(w, `{"error": "failed to save uploaded file"}`, http.StatusInternalServerError)
 			return
 		}
 
-		// Set the screenshot URL in the trade object
+		// set the screenshot url in the trade object
 		trade.ScreenshotURL = stringPtr("/uploads/" + handler.Filename)
 	} else if err != http.ErrMissingFile {
 		http.Error(w, `{"error": "failed to process screenshot"}`, http.StatusBadRequest)
 		return
 	}
 
-	// Add trade to database
+	// add trade to database
 	id, err := models.AddTrade(h.db, trade)
 	if err != nil {
 		log.Printf("Error adding trade: %v", err)
@@ -96,7 +96,7 @@ func (h *TradeHandlers) AddTradeHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	trade.ID = id
 
-	// Calculate and insert trade metrics
+	// use calculate and insert trademetrics function
 	err = models.CalculateAndInsertTradeMetrics(h.db, trade)
 	if err != nil {
 		log.Printf("Error calculating trade metrics: %v", err)
@@ -104,17 +104,18 @@ func (h *TradeHandlers) AddTradeHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Return success response
+	// if successful, return the trade
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(trade)
 }
 
-// Helper functions
+// helper functions
 func parseFloat(s string) float64 {
 	if s == "" {
 		return 0
 	}
+	// convert the string to a float
 	f, _ := strconv.ParseFloat(s, 64)
 	return f
 }
@@ -123,6 +124,7 @@ func parseFloatPtr(s string) *float64 {
 	if s == "" {
 		return nil
 	}
+	// convert the string to a float
 	f, _ := strconv.ParseFloat(s, 64)
 	return &f
 }
@@ -131,6 +133,7 @@ func parseTime(s string) time.Time {
 	if s == "" {
 		return time.Time{}
 	}
+	// convert the string to a time
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
 		return time.Time{}
@@ -145,6 +148,7 @@ func stringPtr(s string) *string {
 	return &s
 }
 func (h *TradeHandlers) GetTradeHandler(w http.ResponseWriter, r *http.Request) {
+	// get the trade id from the url
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "missing trade ID", http.StatusBadRequest)
@@ -156,12 +160,14 @@ func (h *TradeHandlers) GetTradeHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// get the trade from the database
 	trade, err := models.GetTrade(h.db, idInt)
 	if err != nil {
 		http.Error(w, "failed to get trade", http.StatusInternalServerError)
 		return
 	}
 
+	// return the trade
 	if err := json.NewEncoder(w).Encode(trade); err != nil {
 		http.Error(w, "failed to encode trade", http.StatusInternalServerError)
 		return
@@ -169,18 +175,22 @@ func (h *TradeHandlers) GetTradeHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *TradeHandlers) UpdateTradeHandler(w http.ResponseWriter, r *http.Request) {
+	// get the trade id from the url
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		http.Error(w, "missing trade ID", http.StatusBadRequest)
 		return
 	}
 
+	// get the trade from the request body
 	var trade models.Trade
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&trade); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+
+	// convert the trade id to int
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
 		http.Error(w, "invalid trade ID", http.StatusBadRequest)
@@ -220,21 +230,78 @@ func (h *TradeHandlers) DeleteTradeHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *TradeHandlers) ListTradesHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse query parameters for filtering
+	// default values for filter
 	var filter models.TradeFilter
-	if err := json.NewDecoder(r.Body).Decode(&filter); err != nil {
-		http.Error(w, "failed to decode trades", http.StatusInternalServerError)
-		return
+	
+	// check if request is GET or POST
+	if r.Method == "GET" {
+		// get limit from query string
+		if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+			limit, err := strconv.Atoi(limitStr)
+			if err != nil {
+				http.Error(w, "Invalid limit parameter", http.StatusBadRequest)
+				return
+			}
+			filter.Limit = limit
+		}
+		
+		// get offset from query string
+		if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+			offset, err := strconv.Atoi(offsetStr)
+			if err != nil {
+				http.Error(w, "Invalid offset parameter", http.StatusBadRequest)
+				return
+			}
+			filter.Offset = offset
+		}
+		
+		// get ticker from query string
+		if ticker := r.URL.Query().Get("ticker"); ticker != "" {
+			filter.Ticker = ticker
+		}
+		
+		// get start date from query string
+		if startDateStr := r.URL.Query().Get("start_date"); startDateStr != "" {
+			startDate, err := time.Parse("2006-01-02", startDateStr)
+			if err != nil {
+				http.Error(w, "Invalid start_date format (use YYYY-MM-DD)", http.StatusBadRequest)
+				return
+			}
+			filter.StartDate = &startDate
+		}
+		
+		if endDateStr := r.URL.Query().Get("end_date"); endDateStr != "" {
+			endDate, err := time.Parse("2006-01-02", endDateStr)
+			if err != nil {
+				http.Error(w, "Invalid end_date format (use YYYY-MM-DD)", http.StatusBadRequest)
+				return
+			}
+			filter.EndDate = &endDate
+		}
+		
+		// get sort parameters
+		if sortBy := r.URL.Query().Get("sort_by"); sortBy != "" {
+			filter.SortBy = sortBy
+			if r.URL.Query().Get("sort_desc") == "true" {
+				filter.SortDesc = true
+			}
+		}
+	} else if r.Method == "POST" {
+		// if POST, get filter from request body
+		if err := json.NewDecoder(r.Body).Decode(&filter); err != nil {
+			http.Error(w, "Failed to decode filter", http.StatusBadRequest)
+			return
+		}
 	}
 
-	// Fetch trades from the database
+	// get the trades from the database
 	trades, err := models.ListTrades(h.db, filter)
 	if err != nil {
-		http.Error(w, "failed to fetch trades", http.StatusInternalServerError)
+		http.Error(w, "Failed to fetch trades: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Return the list of trades
+	// return the list of trades
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(trades)

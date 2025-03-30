@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import AddTrade from "./components/AddTrades";
-
+import Dashboard from "./components/Dashboard";
 function App() {
   return (
     <Router>
@@ -13,7 +13,7 @@ function App() {
         } />
         <Route path="/trades" element={
           <Layout>
-            <div className="p-4">Trades Page</div>
+            <Dashboard />
           </Layout>
         } />
         <Route path="/add_trade" element={
