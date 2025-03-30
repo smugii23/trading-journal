@@ -29,6 +29,7 @@ const predefinedColors = [
 ];
 
 const AddTrade = () => {
+  // default state for the trade form
   const [trade, setTrade] = useState({
     ticker: "",
     direction: "long",
@@ -47,6 +48,7 @@ const AddTrade = () => {
     screenshot: null,
   });
 
+  // state variables to manage the component
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [notification, setNotification] = useState({ show: false, type: "", message: "" });
@@ -63,7 +65,7 @@ const AddTrade = () => {
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
 
-  // Form validation
+  // function to validate form fields before submission
   const validateForm = () => {
     const errors = {};
     if (!trade.ticker) errors.ticker = "Ticker is required";
@@ -75,28 +77,29 @@ const AddTrade = () => {
     return Object.keys(errors).length === 0;
   };
 
-  // Modify the useEffect for fetching tags
+  // fetch tags from the database
   useEffect(() => {
-    let mounted = true;
+    let mounted = true; // prevent state updates after unmounting
 
     const fetchTags = async () => {
       if (!mounted) return;
       
       setIsLoading(true);
       try {
+        // fetch tags from the database
         const response = await fetch("http://localhost:8080/api/tags");
         if (!response.ok) {
           throw new Error("Failed to fetch tags");
         }
+        // if the tags are fetched successfully, set the tags state
         if (mounted) {
           const data = await response.json();
-          console.log("Tags data:", data); // Debug logging
-          setTags(Array.isArray(data) ? data : []); // Ensure it's always an array
+          setTags(Array.isArray(data) ? data : []); // ensure it's always an array
         }
       } catch (error) {
         if (mounted) {
           console.error("Error fetching tags:", error);
-          setTags([]); // Always set to empty array on error
+          setTags([]); //  set tags to an empty array on error
         }
       } finally {
         if (mounted) {
@@ -107,25 +110,29 @@ const AddTrade = () => {
 
     fetchTags();
 
-    // Cleanup function to prevent state updates after unmounting
+    // cleanup function to prevent state updates after unmounting
     return () => {
       mounted = false;
     };
-  }, []); // Empty dependency array means this runs once on mount
+  }, []); // empty dependency array means this runs once on mount
 
-  // Handle tag selection
+  // handle tag selection
   const handleTagSelect = (tagId) => {
+    // add or remove tag from the selected tags
     setSelectedTags((prev) => {
       if (prev.includes(tagId)) {
+        // remove tag from the selected tags
         return prev.filter((id) => id !== tagId);
       } else {
+        // add tag to the selected tags
         return [...prev, tagId];
       }
     });
   };
 
-  // Handle new tag submission
+  // handle new tag submission
   const handleTagSubmit = async (e) => {
+    // prevent default form submission
     e.preventDefault();
     if (!newTag.name) {
       setNotification({
@@ -137,9 +144,10 @@ const AddTrade = () => {
     }
 
     try {
-      // Log the payload we're sending
+      // log the payload we're sending
       console.log("Sending tag data:", JSON.stringify(newTag, null, 2));
       
+      // send the tag data to the database
       const response = await fetch("http://localhost:8080/api/tags", {
         method: "POST",
         headers: {
@@ -148,14 +156,14 @@ const AddTrade = () => {
         body: JSON.stringify(newTag),
       });
 
-      // If there's an error, try to get the detailed error message
+      // if there's an error, try to get the detailed error message
       if (!response.ok) {
         const errorText = await response.text();
         console.error("Server error response:", errorText);
         throw new Error(`Failed to create tag: ${errorText || response.statusText}`);
       }
 
-      // Parse the response text
+      // parse the response text
       let createdTag;
       try {
         createdTag = JSON.parse(await response.text());
@@ -164,11 +172,11 @@ const AddTrade = () => {
         throw new Error("Invalid response format");
       }
 
-      // Ensure tags is always an array before spreading
+      // make sure tags is always an array before spreading
       const currentTags = Array.isArray(tags) ? tags : [];
       setTags([...currentTags, createdTag]);
       
-      // Also ensure selectedTags is an array
+      // also make sure that selectedTags is an array
       const currentSelectedTags = Array.isArray(selectedTags) ? selectedTags : [];
       setSelectedTags([...currentSelectedTags, createdTag.id]);
       
@@ -190,7 +198,7 @@ const AddTrade = () => {
     }
   };
 
-  // Calculate profit/loss
+  // calculate profit/loss
   const calculateProfit = () => {
     if (trade.entry_price && trade.exit_price && trade.quantity) {
       const entry = parseFloat(trade.entry_price);
@@ -198,6 +206,7 @@ const AddTrade = () => {
       const qty = parseFloat(trade.quantity);
       const comm = parseFloat(trade.commissions) || 0;
 
+      // calculate profit/loss based on the direction of the trade
       let profitLoss;
       if (trade.direction === "long") {
         profitLoss = (exit - entry) * qty;
@@ -210,21 +219,22 @@ const AddTrade = () => {
     return null;
   };
 
-  // Recalculate profit when relevant fields change
+  // recalculate profit when relevant fields change
   useEffect(() => {
     const newProfit = calculateProfit();
     setProfit(newProfit);
   }, [trade.entry_price, trade.exit_price, trade.quantity, trade.direction, trade.commissions]);
 
-  // Handle form field changes
+  // handle form field changes
   const handleChange = (e) => {
     const { name, value } = e.target;
     setTrade((prevTrade) => ({ ...prevTrade, [name]: value }));
   };
 
-  // Handle file upload
+  // handle file upload
   const handleFileChange = (e) => {
     const file = e.target.files[0];
+    // if there is a file, check the size and type
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
         setNotification({
@@ -234,6 +244,7 @@ const AddTrade = () => {
         });
         return;
       }
+      // make sure the file is an image
       if (!file.type.startsWith("image/")) {
         setNotification({
           show: true,
@@ -242,14 +253,18 @@ const AddTrade = () => {
         });
         return;
       }
+      // set the screenshot to the file
       setTrade({ ...trade, screenshot: file });
+      // create a preview url for the file
       setPreviewUrl(URL.createObjectURL(file));
     }
   };
 
-  // Handle form submission
+  // handle form submission
   const handleSubmit = async (e) => {
+    // prevent default form submission
     e.preventDefault();
+    // validate the form fields
     if (!validateForm()) {
       setNotification({
         show: true,
@@ -258,18 +273,18 @@ const AddTrade = () => {
       });
       return;
     }
-  
+    // set the isUploading state to true
     setIsUploading(true);
-  
+
     try {
-      
+      // create a trade date
       const tradeDate = new Date(`${trade.trade_date}T${trade.entry_time}:00Z`).toISOString();
       const entryTime = new Date(`${trade.trade_date}T${trade.entry_time}:00Z`).toISOString();
       const exitTime = new Date(`${trade.trade_date}T${trade.exit_time}:00Z`).toISOString();
   
       const formData = new FormData();
       
-      // Add all trade data
+      // add all trade data
       formData.append("ticker", trade.ticker);
       formData.append("direction", trade.direction.toUpperCase());
       formData.append("entry_price", trade.entry_price);
@@ -285,11 +300,12 @@ const AddTrade = () => {
       formData.append("lowest_price", trade.lowest_price);
       formData.append("notes", trade.notes);
   
-      // Handle screenshot specially
+      // handle screenshot specially
       if (trade.screenshot) {
         formData.append("screenshot", trade.screenshot, trade.screenshot.name);
       }
   
+      // send the trade data to the database
       const response = await fetch("http://localhost:8080/api/trades", {
         method: "POST",
         body: formData,
@@ -303,9 +319,11 @@ const AddTrade = () => {
   
       const result = await response.json();
       
-      // Add selected tags to the newly created trade
+      // add selected tags to the newly created trade
       if (selectedTags.length > 0) {
+        // get the trade id from the response
         const tradeId = result.id;
+        // loop through the selected tags and add them to the trade
         for (const tagId of selectedTags) {
           try {
             await fetch(`http://localhost:8080/api/trades/${tradeId}/tags/${tagId}`, {
@@ -316,12 +334,15 @@ const AddTrade = () => {
           }
         }
       }
-      
+
+      // set the notification to show a success message
       setNotification({
         show: true,
         type: "success",
         message: "Trade added successfully!",
       });
+
+      // reset the form
       resetForm();
     } catch (error) {
       console.error("Error submitting trade:", error);
@@ -336,7 +357,7 @@ const AddTrade = () => {
     }
   };
 
-  // Reset form
+  // reset form
   const resetForm = () => {
     setTrade({
       ticker: "",
@@ -361,7 +382,7 @@ const AddTrade = () => {
     setSelectedTags([]);
   };
 
-  // Confirmation modal for reset
+  // confirmation modal for reset
   const handleResetClick = () => setShowResetModal(true);
   const handleResetConfirm = () => {
     resetForm();
@@ -375,6 +396,7 @@ const AddTrade = () => {
       {/* Notification */}
       {notification.show && (
         <div
+          // set the notification color based on the type
           className={`mb-4 p-3 rounded flex items-center ${
             notification.type === "success" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
           }`}

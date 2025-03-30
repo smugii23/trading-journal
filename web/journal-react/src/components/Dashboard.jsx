@@ -23,21 +23,21 @@ const Dashboard = () => {
     const fetchDashboardData = async () => {
       setLoading(true);
       try {
-        // Fetch statistics
+        // fetch statistics
         const statsResponse = await fetch("http://localhost:8080/api/statistics");
         if (!statsResponse.ok) {
           throw new Error("Failed to fetch statistics");
         }
         const statsData = await statsResponse.json();
         
-        // Fetch recent trades
+        // fetch recent trades
         const tradesResponse = await fetch("http://localhost:8080/api/trades?limit=10");
         if (!tradesResponse.ok) {
           throw new Error("Failed to fetch trades");
         }
         const tradesData = await tradesResponse.json();
         
-        // Fetch tags
+        // fetch tags
         const tagsResponse = await fetch("http://localhost:8080/api/tags");
         if (!tagsResponse.ok) {
           throw new Error("Failed to fetch tags");
