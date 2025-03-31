@@ -28,6 +28,11 @@ const predefinedColors = [
   "#44403c", // Stone
 ];
 
+const TICK_VALUES = {
+  GC: { tickValue: 10, tickSize: 0.1 }, // Gold futures
+  ES: { tickValue: 12.50, tickSize: 0.25 } // E-mini S&P 500 futures
+};
+
 const AddTrade = () => {
   // default state for the trade form
   const [trade, setTrade] = useState({

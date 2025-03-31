@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import AddTrade from "./components/AddTrades";
-import Dashboard from "./components/Dashboard";
+import Dashboard from "./components/dashboard2";
 function App() {
   return (
     <Router>

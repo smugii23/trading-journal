@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { 
   BarChart, 
-  PieChart, 
   LineChart, 
   TrendingUp, 
   TrendingDown, 
@@ -60,7 +60,7 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto mt-10 p-6 bg-white rounded-lg shadow">
+      <div className="w-full mx-0.5 mt-10 pb-10">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
         </div>
@@ -70,7 +70,7 @@ const Dashboard = () => {
 
   if (error) {
     return (
-      <div className="max-w-7xl mx-auto mt-10 p-6 bg-white rounded-lg shadow">
+      <div className="w-full mx-0.5 mt-10 pb-10">
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
           <p>Error loading dashboard: {error}</p>
         </div>
@@ -79,11 +79,11 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto mt-10 pb-10">
-      <h1 className="text-3xl font-bold mb-6">Trading Dashboard</h1>
+    <div className="w-full mt-10 pb-10">
+      <h1 className="text-3xl font-bold mb-6 px-4">Trading Dashboard</h1>
       
       {/* Key Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="w-[85%] max-w-[1600px] mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {stats && (
           <>
             <StatCard 
@@ -107,8 +107,8 @@ const Dashboard = () => {
             <StatCard 
               title="Current Streak" 
               value={stats.current_streak < 0 
-                ? `${stats.current_streak}` // Already has minus sign if negative
-                : `+${stats.current_streak}` // Add plus sign for winning streak
+                ? `${stats.current_streak}`
+                : `+${stats.current_streak}`
               }
               icon={stats.current_streak >= 0 ? 
                 <TrendingUp className="h-8 w-8 text-green-500" /> : 
@@ -121,39 +121,54 @@ const Dashboard = () => {
       </div>
       
       {/* Second Row - Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div className="w-[85%] max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Win/Loss Chart */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4 flex items-center">
+        <div className="bg-white rounded-lg shadow p-3">
+          <h2 className="text-xl font-semibold mb-2 flex items-center">
             <PieChart className="h-5 w-5 mr-2" />
             Win/Loss Ratio
           </h2>
           {stats && (
-            <div className="flex items-center justify-center h-64">
-              {/* Placeholder for Win/Loss Pie Chart */}
-              <div className="flex w-full max-w-xs">
-                <div className="relative h-48 w-48 mx-auto">
-                  <div className="h-full w-full rounded-full overflow-hidden">
-                    <div className="h-full bg-green-500" 
-                         style={{width: `${(stats.winning_trades / stats.total_trades) * 100}%`}}></div>
-                  </div>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-2xl font-bold">
-                      {stats.winning_trades} / {stats.losing_trades}
-                    </span>
-                    <span className="text-gray-500">Win / Loss</span>
-                  </div>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Wins', value: stats.winning_trades },
+                      { name: 'Losses', value: stats.losing_trades },
+                      { name: 'Break Even', value: stats.break_even_trades ?? 0 }
+                    ]}
+                    cx="50%"
+                    cy="45%"
+                    labelLine={false}
+                    label={({ name, value, percent }) => 
+                      `${name}: ${value} (${(percent * 100).toFixed(1)}%)`
+                    }
+                    outerRadius={85}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    <Cell fill="#16a34a" /> {/* Green for wins */}
+                    <Cell fill="#dc2626" /> {/* Red for losses */}
+                    <Cell fill="#9ca3af" /> {/* Gray for break-even */}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+              
+              {/* Legend */}
+              <div className="flex justify-center gap-4 -mt-6">
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-green-600 mr-2"></div>
+                  <span>Wins: {stats.winning_trades}</span>
                 </div>
-                
-                <div className="flex flex-col justify-center p-4">
-                  <div className="flex items-center mb-2">
-                    <div className="w-4 h-4 bg-green-500 mr-2"></div>
-                    <span>Wins: {stats.winning_trades}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="w-4 h-4 bg-red-500 mr-2"></div>
-                    <span>Losses: {stats.losing_trades}</span>
-                  </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-red-600 mr-2"></div>
+                  <span>Losses: {stats.losing_trades}</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-4 h-4 bg-gray-400 mr-2"></div>
+                  <span>Break Even: {stats.break_even_trades ?? 0}</span>
                 </div>
               </div>
             </div>
@@ -176,9 +191,9 @@ const Dashboard = () => {
       </div>
       
       {/* Third Row - Tags and Recent Trades */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Tags Section */}
-        <div className="bg-white rounded-lg shadow p-6 lg:col-span-1">
+      <div className="w-[85%] max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-4 gap-3">
+        {/* Tags Section - make narrower */}
+        <div className="bg-white rounded-lg shadow p-4 lg:col-span-1">
           <h2 className="text-xl font-semibold mb-4 flex items-center">
             <Tag className="h-5 w-5 mr-2" />
             Trade Tags
@@ -213,8 +228,8 @@ const Dashboard = () => {
           )}
         </div>
         
-        {/* Recent Trades */}
-        <div className="bg-white rounded-lg shadow p-6 lg:col-span-2">
+        {/* Recent Trades - make wider */}
+        <div className="bg-white rounded-lg shadow p-4 lg:col-span-3">
           <h2 className="text-xl font-semibold mb-4">Recent Trades</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">

@@ -20,6 +20,7 @@ type AggregateTradeStats struct {
 	ExpectancyPerTrade   float64 `json:"expectancy_per_trade"`
 	MaxDrawdown          float64 `json:"max_drawdown"`
 	CurrentStreak        int     `json:"current_streak"`
+	BreakEvenTrades      int     `json:"break_even_trades"`
 }
 
 func GetBasicStats(db *sql.DB, userID int) (AggregateTradeStats, error) {
@@ -37,22 +38,20 @@ func GetBasicStats(db *sql.DB, userID int) (AggregateTradeStats, error) {
 	err = db.QueryRow(`
 		SELECT 
 			COUNT(*) as total_trades,
-			-- if profit_loss is greater than 0, it's a winning trade
 			COUNT(CASE WHEN tm.profit_loss > 0 THEN 1 END) as winning_trades,
-			-- if profit_loss is less than or equal to 0, it's a losing trade
-			COUNT(CASE WHEN tm.profit_loss <= 0 THEN 1 END) as losing_trades
+			COUNT(CASE WHEN tm.profit_loss < 0 THEN 1 END) as losing_trades,
+			COUNT(CASE WHEN tm.profit_loss = 0 THEN 1 END) as break_even_trades
 		FROM trades t
-		-- only for user selected
 		JOIN trade_metrics tm ON t.id = tm.trade_id
 		WHERE t.user_id = $1
-	`, userID).Scan(&stats.TotalTrades, &stats.WinningTrades, &stats.LosingTrades)
+	`, userID).Scan(&stats.TotalTrades, &stats.WinningTrades, &stats.LosingTrades, &stats.BreakEvenTrades)
 	if err != nil {
 		return stats, err
 	}
 
-	// calculating win rate
-	if stats.TotalTrades > 0 {
-		stats.WinRate = float64(stats.WinningTrades) / float64(stats.TotalTrades)
+	// calculating win rate (excluding break-even trades)
+	if (stats.TotalTrades - stats.BreakEvenTrades) > 0 {
+		stats.WinRate = float64(stats.WinningTrades) / float64(stats.TotalTrades - stats.BreakEvenTrades)
 	}
 
 	// calculate average win/loss and holding period
@@ -179,7 +178,7 @@ func GetBasicStats(db *sql.DB, userID int) (AggregateTradeStats, error) {
 			SELECT 
 				t.exit_time,
 				tm.profit_loss,
-				SUM(tm.profit_loss) OVER (ORDER BY t.exit_time) as balance  -- use OVER to calculate the running total at each trade
+				SUM(tm.profit_loss) OVER (ORDER BY t.exit_time) as balance  -- use OVER to calculate the running total at every trade
 			FROM trades t
 			JOIN trade_metrics tm ON t.id = tm.trade_id
 			WHERE t.user_id = $1
@@ -192,7 +191,7 @@ func GetBasicStats(db *sql.DB, userID int) (AggregateTradeStats, error) {
 				balance,
 				MAX(balance) OVER (ORDER BY exit_time) as peak
 			FROM running_balance
-		),
+		)
 		-- calculate the drawdown as a percentage of the peak balance
 		SELECT 
 			(peak - balance) / NULLIF(peak, 0) * 100 as drawdown_percent

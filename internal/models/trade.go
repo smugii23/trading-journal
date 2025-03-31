@@ -50,6 +50,16 @@ type DbExecutor interface {
 	Exec(query string, args ...interface{}) (sql.Result, error)
 }
 
+type FuturesContract struct {
+	TickValue   float64 // Dollar value of one tick
+	MinTickSize float64 // Minimum price increment
+}
+
+var FuturesContractMap = map[string]FuturesContract{
+	"ES":  {12.50, 0.25},     // E-mini S&P 500 - $12.50 per point, 0.25 point minimum tick
+	"GC":  {10.0, 0.1},       // Gold futures - $10 per tick, 0.1 tick minimum tick
+
+
 func AddTrade(db DbExecutor, trade Trade) (int, error) {
 	// prepare the SQL statement to insert the trade
 	stmt, err := db.Prepare(`
@@ -93,13 +103,37 @@ func CalculateAndInsertTradeMetrics(db *sql.DB, trade Trade) error {
 
 	// calculate profit/loss
 	var profitLoss float64
-	switch direction {
-	case "LONG":
-		profitLoss = (trade.ExitPrice - trade.EntryPrice) * trade.Quantity
-	case "SHORT":
-		profitLoss = (trade.EntryPrice - trade.ExitPrice) * trade.Quantity
-	default:
-		return fmt.Errorf("invalid trade direction: %s", trade.Direction)
+	
+	// check if this is a known futures contract
+	if contract, isFutures := FuturesContractMap[trade.Ticker]; isFutures {
+		tickValue := contract.TickValue
+		tickSize := contract.TickSize
+		// calculate price difference
+		var priceDiff float64
+		switch direction {
+		case "LONG":
+			priceDiff = trade.ExitPrice - trade.EntryPrice
+		case "SHORT":
+			priceDiff = trade.EntryPrice - trade.ExitPrice
+		default:
+			return fmt.Errorf("invalid trade direction: %s", trade.Direction)
+		}
+		
+		// calculate number of ticks (rounding to the nearest valid tick)
+		numTicks := math.Round(priceDiff / tickSize)
+		
+		// calculate profit loss based on number of ticks and tick value
+		profitLoss = numTicks * tickSize * tickValue * trade.Quantity
+	} else {
+		// for non-futures contracts, just use price difference * quantity
+		switch direction {
+		case "LONG":
+			profitLoss = (trade.ExitPrice - trade.EntryPrice) * trade.Quantity
+		case "SHORT":
+			profitLoss = (trade.EntryPrice - trade.ExitPrice) * trade.Quantity
+		default:
+			return fmt.Errorf("invalid trade direction: %s", trade.Direction)
+		}
 	}
 
 	// deduct commissions (if provided)
