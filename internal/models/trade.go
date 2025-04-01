@@ -52,12 +52,13 @@ type DbExecutor interface {
 
 type FuturesContract struct {
 	TickValue   float64 // Dollar value of one tick
-	MinTickSize float64 // Minimum price increment
+	TickSize float64 // Minimum price increment
 }
 
 var FuturesContractMap = map[string]FuturesContract{
 	"ES":  {12.50, 0.25},     // E-mini S&P 500 - $12.50 per point, 0.25 point minimum tick
 	"GC":  {10.0, 0.1},       // Gold futures - $10 per tick, 0.1 tick minimum tick
+}
 
 
 func AddTrade(db DbExecutor, trade Trade) (int, error) {
@@ -123,7 +124,7 @@ func CalculateAndInsertTradeMetrics(db *sql.DB, trade Trade) error {
 		numTicks := math.Round(priceDiff / tickSize)
 		
 		// calculate profit loss based on number of ticks and tick value
-		profitLoss = numTicks * tickSize * tickValue * trade.Quantity
+		profitLoss = numTicks * tickValue * trade.Quantity
 	} else {
 		// for non-futures contracts, just use price difference * quantity
 		switch direction {

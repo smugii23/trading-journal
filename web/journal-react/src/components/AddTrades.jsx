@@ -28,9 +28,9 @@ const predefinedColors = [
   "#44403c", // Stone
 ];
 
-const TICK_VALUES = {
-  GC: { tickValue: 10, tickSize: 0.1 }, // Gold futures
-  ES: { tickValue: 12.50, tickSize: 0.25 } // E-mini S&P 500 futures
+const FUTURES_CONTRACTS = {
+  "ES": { tickValue: 12.50, minTickSize: 0.25 },     // E-mini S&P 500
+  "GC": { tickValue: 10.0, minTickSize: 0.1 },      // Gold
 };
 
 const AddTrade = () => {
@@ -203,38 +203,65 @@ const AddTrade = () => {
     }
   };
 
-  // calculate profit/loss
-  const calculateProfit = () => {
-    if (trade.entry_price && trade.exit_price && trade.quantity) {
-      const entry = parseFloat(trade.entry_price);
-      const exit = parseFloat(trade.exit_price);
-      const qty = parseFloat(trade.quantity);
-      const comm = parseFloat(trade.commissions) || 0;
+// function to check if a ticker is a futures contract
+const isFuturesContract = (ticker) => {
+  return !!FUTURES_CONTRACTS[ticker?.toUpperCase()];
+};
 
-      // calculate profit/loss based on the direction of the trade
+// calculate profit/loss
+const calculateProfit = () => {
+  if (trade.entry_price && trade.exit_price && trade.quantity) {
+    const entry = parseFloat(trade.entry_price);
+    const exit = parseFloat(trade.exit_price);
+    const qty = parseFloat(trade.quantity);
+    const comm = parseFloat(trade.commissions) || 0;
+    const ticker = trade.ticker?.toUpperCase();
+    
+    // check if this is a futures contract
+    if (isFuturesContract(ticker)) {
+      const contract = FUTURES_CONTRACTS[ticker];
+      
+      // calculate price difference based on direction
+      let priceDiff;
+      if (trade.direction === "long") {
+        priceDiff = exit - entry;
+      } else {
+        priceDiff = entry - exit;
+      }
+      
+      // calculate number of ticks (rounded to nearest valid tick)
+      const numTicks = Math.round(priceDiff / contract.minTickSize);
+      
+      // calculate profit loss based on number of ticks and tick value
+      const profitLoss = numTicks * contract.tickValue * qty;
+      
+      return profitLoss - comm;
+    } else {
+      // for non-futures contracts, just use price difference * quantity
       let profitLoss;
       if (trade.direction === "long") {
         profitLoss = (exit - entry) * qty;
       } else {
         profitLoss = (entry - exit) * qty;
       }
-
+      
       return profitLoss - comm;
     }
-    return null;
-  };
+  }
+  return null;
+};
 
-  // recalculate profit when relevant fields change
-  useEffect(() => {
-    const newProfit = calculateProfit();
-    setProfit(newProfit);
-  }, [trade.entry_price, trade.exit_price, trade.quantity, trade.direction, trade.commissions]);
+// recalculate profit when relevant fields change
+useEffect(() => {
+  const newProfit = calculateProfit();
+  setProfit(newProfit);
+}, [trade.entry_price, trade.exit_price, trade.quantity, trade.direction, trade.commissions, trade.ticker]);
 
-  // handle form field changes
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setTrade((prevTrade) => ({ ...prevTrade, [name]: value }));
-  };
+// handle form field changes
+const handleChange = (e) => {
+  const { name, value } = e.target;
+  setTrade((prevTrade) => ({ ...prevTrade, [name]: value }));
+};
 
   // handle file upload
   const handleFileChange = (e) => {

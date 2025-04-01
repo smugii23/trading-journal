@@ -232,7 +232,7 @@ func (h *TradeHandlers) DeleteTradeHandler(w http.ResponseWriter, r *http.Reques
 func (h *TradeHandlers) ListTradesHandler(w http.ResponseWriter, r *http.Request) {
 	// default values for filter
 	var filter models.TradeFilter
-	
+
 	// check if request is GET or POST
 	if r.Method == "GET" {
 		// get limit from query string
@@ -244,7 +244,7 @@ func (h *TradeHandlers) ListTradesHandler(w http.ResponseWriter, r *http.Request
 			}
 			filter.Limit = limit
 		}
-		
+
 		// get offset from query string
 		if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
 			offset, err := strconv.Atoi(offsetStr)
@@ -254,12 +254,12 @@ func (h *TradeHandlers) ListTradesHandler(w http.ResponseWriter, r *http.Request
 			}
 			filter.Offset = offset
 		}
-		
+
 		// get ticker from query string
 		if ticker := r.URL.Query().Get("ticker"); ticker != "" {
 			filter.Ticker = ticker
 		}
-		
+
 		// get start date from query string
 		if startDateStr := r.URL.Query().Get("start_date"); startDateStr != "" {
 			startDate, err := time.Parse("2006-01-02", startDateStr)
@@ -269,7 +269,7 @@ func (h *TradeHandlers) ListTradesHandler(w http.ResponseWriter, r *http.Request
 			}
 			filter.StartDate = &startDate
 		}
-		
+
 		if endDateStr := r.URL.Query().Get("end_date"); endDateStr != "" {
 			endDate, err := time.Parse("2006-01-02", endDateStr)
 			if err != nil {
@@ -278,7 +278,7 @@ func (h *TradeHandlers) ListTradesHandler(w http.ResponseWriter, r *http.Request
 			}
 			filter.EndDate = &endDate
 		}
-		
+
 		// get sort parameters
 		if sortBy := r.URL.Query().Get("sort_by"); sortBy != "" {
 			filter.SortBy = sortBy

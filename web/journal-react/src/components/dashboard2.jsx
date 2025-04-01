@@ -26,6 +26,11 @@ import {
   Filter
 } from "lucide-react";
 
+const TICK_VALUES = {
+  GC: { tickValue: 10, tickSize: 0.1 }, // Gold futures
+  ES: { tickValue: 12.50, tickSize: 0.25 } // E-mini S&P 500 futures
+};
+
 const Dashboard = () => {
   const [stats, setStats] = useState(null);
   const [trades, setTrades] = useState([]);
@@ -199,16 +204,23 @@ const Dashboard = () => {
     const equityPoints = trades
       .sort((a, b) => new Date(a.trade_date) - new Date(b.trade_date))
       .map(trade => {
+        // Get the tick value and size based on the ticker
+        const { tickValue, tickSize } = TICK_VALUES[trade.ticker] || { tickValue: 0, tickSize: 1 }; // Default to 0 if ticker not found
+
         // Calculate profit/loss for this trade
         let profit = 0;
         if (trade.exit_price && trade.entry_price) {
-          profit = trade.direction === "LONG" 
-            ? (trade.exit_price - trade.entry_price) * trade.quantity
-            : (trade.entry_price - trade.exit_price) * trade.quantity;
-            
-          if (trade.commissions) {
-            profit -= trade.commissions;
-          }
+          // Calculate the number of ticks moved
+          const ticksMoved = trade.direction === "LONG" 
+            ? (trade.exit_price - trade.entry_price) / tickSize
+            : (trade.entry_price - trade.exit_price) / tickSize;
+
+          // Calculate profit based on the number of ticks moved
+          profit = ticksMoved * tickValue * trade.quantity; // Adjusted profit calculation
+        }
+        
+        if (trade.commissions) {
+          profit -= trade.commissions; // Subtract commissions
         }
         
         balance += profit; // Update the balance with the profit/loss
@@ -502,13 +514,21 @@ const Dashboard = () => {
               </thead>
               <tbody>
                 {trades.map((trade) => {
-                  // Calculate P/L
-                  const profitLoss = trade.direction === "LONG"
-                    ? (trade.exit_price - trade.entry_price) * trade.quantity
-                    : (trade.entry_price - trade.exit_price) * trade.quantity;
-                    
+                  // Get the tick value and size based on the ticker
+                  const { tickValue, tickSize } = TICK_VALUES[trade.ticker] || { tickValue: 0, tickSize: 1 }; // Default to 0 if ticker not found
+
+                  // Calculate P/L for the trade
+                  let profitLoss = 0;
+                  if (trade.exit_price && trade.entry_price) {
+                    const ticksMoved = trade.direction === "LONG" 
+                      ? (trade.exit_price - trade.entry_price) / tickSize
+                      : (trade.entry_price - trade.exit_price) / tickSize;
+
+                    profitLoss = ticksMoved * tickValue * trade.quantity; // Adjusted profit calculation
+                  }
+
                   const isProfitable = profitLoss >= 0;
-                  
+
                   return (
                     <tr key={trade.id} className="border-b hover:bg-gray-50">
                       <td className="px-4 py-2">

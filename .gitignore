@@ -1,1 +1,30 @@
 .env
+node_modules/
+dist/
+venv/
+uploads/
+
+# go 
+*.exe
+*.o
+*.test
+/bin/
+/pkg/
+.idea/
+
+# python
+*.pyc
+__pycache__/
+
+# SQL
+*.db
+*.sqlite
+*.sqlite3
+
+# general
+.DS_Store
+*.swp
+*.swo
+tmp/
+temp/
+logs/
