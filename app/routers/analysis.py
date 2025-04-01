@@ -3,12 +3,14 @@ from typing import List
 
 # Import models and services
 from app.models.trade_models import (
-    Trade, TimePatternResponse, TradeClusterResponse, StrategyEffectivenessResponse
+    Trade, TimePatternResponse, TradeClusterResponse, StrategyEffectivenessResponse,
+    MarketCorrelationResponse # Import new model
 )
 from app.services.analysis_service import (
     perform_time_pattern_analysis,
     perform_trade_clustering,
-    perform_strategy_effectiveness_analysis
+    perform_strategy_effectiveness_analysis,
+    perform_market_correlation_analysis # Import new service function
 )
 
 # create the api router
@@ -75,3 +77,21 @@ async def analyze_strategy_effectiveness_endpoint(trades: List[Trade] = Body(...
         print(f"Error in strategy_effectiveness endpoint: {e}")
         raise HTTPException(status_code=500, detail="Internal server error during strategy effectiveness analysis.")
 
+
+@router.post("/market_correlation", response_model=MarketCorrelationResponse)
+async def analyze_market_correlation_endpoint(trades: List[Trade] = Body(...)):
+    """
+    Analyzes trade performance based on previous day's market conditions
+    Only implemented for ES and XAU/USD(GC) for now. (SPY direction, VIX level, DXY direction, GC=F direction)
+    """
+    if not trades:
+        return MarketCorrelationResponse(market_correlation={})
+
+    try:
+        result = perform_market_correlation_analysis(trades)
+        return MarketCorrelationResponse(market_correlation=result)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        print(f"Error in market_correlation endpoint: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error during market correlation analysis.")

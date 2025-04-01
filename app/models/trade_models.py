@@ -55,5 +55,16 @@ class StrategyPerformanceMetrics(BaseModel):
     trade_count: int
 
 class StrategyEffectivenessResponse(BaseModel):
-    """The response for the calculated metrics by strategy."""
+    """Response containing performance metrics keyed by strategy tag."""
     strategy_performance: Dict[str, StrategyPerformanceMetrics]
+
+
+class MarketConditionPerformanceMetrics(BaseModel):
+    """Performance metrics for previous day market condition."""
+    total_pnl: float
+    win_rate: float
+    trade_count: int
+
+class MarketCorrelationResponse(BaseModel):
+    """Response with calculated performance metrics for each previous day market condition."""
+    market_correlation: Dict[str, MarketConditionPerformanceMetrics]

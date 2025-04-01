@@ -1,13 +1,15 @@
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
+import yfinance as yf # Import yfinance
 
 from app.models.trade_models import (
-    Trade, TimePerformanceMetrics, ClusterInfo, StrategyPerformanceMetrics
+    Trade, TimePerformanceMetrics, ClusterInfo, StrategyPerformanceMetrics,
+    MarketConditionPerformanceMetrics # Import new model
 )
 
 def perform_time_pattern_analysis(trades: List[Trade]) -> Dict[str, Dict[Any, TimePerformanceMetrics]]:
@@ -208,3 +210,122 @@ def perform_strategy_effectiveness_analysis(trades: List[Trade]) -> Dict[str, St
         strategy_performance[name] = metrics
 
     return strategy_performance
+
+
+def perform_market_correlation_analysis(trades: List[Trade]) -> Dict[str, MarketConditionPerformanceMetrics]:
+    """
+    Analyzes trade performance based on previous day's market conditions using yfinance
+    (SPY direction and VIX levels for ES, DXY direction and GC=F(utures) direction for XAU/USD(GC)).
+    """
+    if not trades:
+        return {}
+
+    # make sure that ticker and exit time is provided
+    valid_trades = [t for t in trades if t.exit_time and t.ticker]
+    if not valid_trades:
+        print("Warning: No trades with exit_time and ticker provided for market correlation.")
+        return {}
+
+    # import all valid trades into a dataframe
+    df_trades = pd.DataFrame([trade.model_dump() for trade in valid_trades])
+    # make sure that the exit times are treated as datetime values
+    df_trades['exit_time'] = pd.to_datetime(df_trades['exit_time'])
+    # get only the date from the exit time
+    df_trades['exit_date'] = df_trades['exit_time'].dt.floor('D').dt.date 
+
+    # find the earliest and latest dates for all of the trades
+    min_date = df_trades['exit_date'].min() - pd.Timedelta(days=7) # include a buffer for shifts and 
+    max_date = df_trades['exit_date'].max() + pd.Timedelta(days=1) # include max date
+
+    # fetch market data:
+    tickers = ['SPY', '^VIX', 'DX-Y.NYB', 'GC=F']
+    try:
+        # use yfinance to download the daily open and close for the tickers
+        market_data = yf.download(tickers, start=min_date, end=max_date, progress=False) # progress false hides download messages
+        if market_data.empty:
+            print("Warning: yfinance returned no market data for the specified range.")
+            return {}
+        # get only the open and close from the market data
+        market_data_processed = market_data[['Open', 'Close']].copy()
+        # combine the level of columns (Open_SPY, Close_SPY, etc.)
+        market_data_processed.columns = ['_'.join(col).strip() for col in market_data_processed.columns.values]
+        # in case there are any gaps from holidays or weekends, fill it with the previous day's value using forward fill.
+        market_data_processed = market_data_processed.ffill()
+
+    except Exception as e:
+        print(f"Error fetching or processing market data from yfinance: {e}")
+        return {}
+
+    # calculate the daily market conditions:
+    conditions = pd.DataFrame(index=market_data_processed.index) # use the dates from the market data as the index
+    # for each ticker, check if they closed higher than it opened
+    if 'Close_SPY' in market_data_processed and 'Open_SPY' in market_data_processed:
+        conditions['SPY_Up'] = market_data_processed['Close_SPY'] > market_data_processed['Open_SPY']
+    if 'Close_^VIX' in market_data_processed:
+        conditions['VIX_High'] = market_data_processed['Close_^VIX'] > 20
+    if 'Close_DX-Y.NYB' in market_data_processed and 'Open_DX-Y.NYB' in market_data_processed:
+        conditions['DXY_Up'] = market_data_processed['Close_DX-Y.NYB'] > market_data_processed['Open_DX-Y.NYB']
+    if 'Close_GC=F' in market_data_processed and 'Open_GC=F' in market_data_processed:
+        conditions['GCF_Up'] = market_data_processed['Close_GC=F'] > market_data_processed['Open_GC=F']
+
+    # we want to shift the condition data one row down, so that we compare the PREVIOUS day's conditions
+    conditions_prev_day = conditions.shift(1)
+
+    # add the exit date as the index for the trades table so we can match each trade by the date
+    df_trades['exit_date_dt'] = pd.to_datetime(df_trades['exit_date'])
+    df_trades = df_trades.set_index('exit_date_dt')
+
+    # merge the two table by looking up the exit date in the conditions_prev_day dataframe and adding it to each of df_trades' row
+    df_merged = pd.merge(df_trades, conditions_prev_day, left_index=True, right_index=True, how='left')
+
+    results = {}
+    df_merged['is_win'] = df_merged['pnl'] > 0
+
+    # define which conditions apply to which tickers
+    condition_map = {
+        'SPY_PrevDay_Up': ('SPY_Up', ['ES']),
+        'SPY_PrevDay_Down': ('SPY_Up', ['ES']),
+        'VIX_PrevDay_High': ('VIX_High', ['ES']),
+        'VIX_PrevDay_Low': ('VIX_High', ['ES']),
+        'DXY_PrevDay_Up': ('DXY_Up', ['XAU/USD', 'GC=F', 'XAUUSD']),
+        'DXY_PrevDay_Down': ('DXY_Up', ['XAU/USD', 'GC=F', 'XAUUSD']),
+        'GCF_PrevDay_Up': ('GCF_Up', ['XAU/USD', 'GC=F', 'XAUUSD']),
+        'GCF_PrevDay_Down': ('GCF_Up', ['XAU/USD', 'GC=F', 'XAUUSD']),
+    }
+
+    # loop through each condition we want to test
+    for result_key, (condition_col, relevant_tickers_patterns) in condition_map.items():
+        # skip if something went wrong and condition column doesn't exist
+        if condition_col not in df_merged.columns:
+            print(f"Warning: Condition column '{condition_col}' not available for analysis.")
+            continue
+
+        # see if the condition is positive, and match the relevant tickers
+        is_positive_condition = 'Up' in result_key or 'High' in result_key
+        ticker_regex = '|'.join(relevant_tickers_patterns)
+
+        # select the condition column from df_merged, and fills NaN values with the opposite of is_positive_condition to make sure
+        # that they don't incorrectly match the condition
+        # then, compare the column values with is_positive_condition
+        condition_mask = df_merged[condition_col].fillna(not is_positive_condition) == is_positive_condition
+        # combine the condition mask with a ticker mask
+        mask = (
+            df_merged['ticker'].str.contains(ticker_regex, case=False, na=False, regex=True) &
+            condition_mask
+        )
+        # apply the mask and get the resulting group
+        group = df_merged[mask]
+
+        if not group.empty:
+            # calculate performance statistics for this group
+            win_rate_val = round(group['is_win'].mean(), 2) if not group['is_win'].empty else 0.0
+            metrics = MarketConditionPerformanceMetrics(
+                total_pnl=round(group['pnl'].sum(), 2),
+                win_rate=win_rate_val,
+                trade_count=len(group)
+            )
+            results[result_key] = metrics
+
+    return results
+
+
