@@ -7,10 +7,10 @@ from app.models.trade_models import (
     MarketCorrelationResponse # Import new model
 )
 from app.services.analysis_service import (
-    perform_time_pattern_analysis,
-    perform_trade_clustering,
-    perform_strategy_effectiveness_analysis,
-    perform_market_correlation_analysis # Import new service function
+    time_pattern_analysis,
+    trade_clustering,
+    strategy_effectiveness_analysis,
+    market_correlation_analysis
 )
 
 # create the api router
@@ -26,7 +26,7 @@ async def analyze_time_patterns_endpoint(trades: List[Trade] = Body(...)):
     For trades to be analyzed, they need to have an exit time.
     """
     try:
-        result = perform_time_pattern_analysis(trades)
+        result = time_pattern_analysis(trades)
         return result
     except ValueError as ve: # if there are any specific errors, catch them
          raise HTTPException(status_code=400, detail=str(ve))
@@ -52,7 +52,7 @@ async def analyze_trade_clusters_endpoint(
          raise HTTPException(status_code=400, detail="No trades provided for clustering.")
 
     try:
-        result = perform_trade_clustering(trades, n_clusters, features)
+        result = trade_clustering(trades, n_clusters, features)
         return result
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
@@ -71,7 +71,7 @@ async def analyze_strategy_effectiveness_endpoint(trades: List[Trade] = Body(...
         return StrategyEffectivenessResponse(strategy_performance={})
 
     try:
-        result = perform_strategy_effectiveness_analysis(trades)
+        result = strategy_effectiveness_analysis(trades)
         return {"strategy_performance": result}
     except Exception as e:
         print(f"Error in strategy_effectiveness endpoint: {e}")
@@ -88,7 +88,7 @@ async def analyze_market_correlation_endpoint(trades: List[Trade] = Body(...)):
         return MarketCorrelationResponse(market_correlation={})
 
     try:
-        result = perform_market_correlation_analysis(trades)
+        result = market_correlation_analysis(trades)
         return MarketCorrelationResponse(market_correlation=result)
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))

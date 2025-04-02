@@ -5,14 +5,18 @@ from datetime import datetime
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
-import yfinance as yf # Import yfinance
+import yfinance as yf
+import pandas_ta as ta
 
 from app.models.trade_models import (
     Trade, TimePerformanceMetrics, ClusterInfo, StrategyPerformanceMetrics,
-    MarketConditionPerformanceMetrics # Import new model
+    MarketConditionPerformanceMetrics
 )
 
-def perform_time_pattern_analysis(trades: List[Trade]) -> Dict[str, Dict[Any, TimePerformanceMetrics]]:
+# to make sure we don't have repeated downloads, cache downloaded data
+yf_data_cache = {}
+
+def time_pattern_analysis(trades: List[Trade]) -> Dict[str, Dict[Any, TimePerformanceMetrics]]:
     """
     This analyzes trades to see if trading performance depends on the time they happened.
     Specifically, it looks at the hour of the day and the day of the week.
@@ -72,7 +76,7 @@ def perform_time_pattern_analysis(trades: List[Trade]) -> Dict[str, Dict[Any, Ti
     }
 
 
-def perform_trade_clustering(trades: List[Trade], n_clusters: int, features: List[str]) -> Dict[str, Any]:
+def trade_clustering(trades: List[Trade], n_clusters: int, features: List[str]) -> Dict[str, Any]:
     """
     The goal of the trade clustering analysis is to automatically group similar trades together.
     We can accomplish this using K-means clustering based on specific features.
@@ -181,7 +185,7 @@ def _calculate_profit_factor(group):
         return float('inf') if total_profit > 0 else None
     return round(total_profit / total_loss, 2)
 
-def perform_strategy_effectiveness_analysis(trades: List[Trade]) -> Dict[str, StrategyPerformanceMetrics]:
+def strategy_effectiveness_analysis(trades: List[Trade]) -> Dict[str, StrategyPerformanceMetrics]:
     """
     Analyzes performance metrics for trades grouped by their strategy_tag.
     """
@@ -212,7 +216,7 @@ def perform_strategy_effectiveness_analysis(trades: List[Trade]) -> Dict[str, St
     return strategy_performance
 
 
-def perform_market_correlation_analysis(trades: List[Trade]) -> Dict[str, MarketConditionPerformanceMetrics]:
+def market_correlation_analysis(trades: List[Trade]) -> Dict[str, MarketConditionPerformanceMetrics]:
     """
     Analyzes trade performance based on previous day's market conditions using yfinance
     (SPY direction and VIX levels for ES, DXY direction and GC=F(utures) direction for XAU/USD(GC)).
@@ -308,7 +312,7 @@ def perform_market_correlation_analysis(trades: List[Trade]) -> Dict[str, Market
         # that they don't incorrectly match the condition
         # then, compare the column values with is_positive_condition
         condition_mask = df_merged[condition_col].fillna(not is_positive_condition) == is_positive_condition
-        # combine the condition mask with a ticker mask
+        # combine the condition mask with a ticker mask to match tickers
         mask = (
             df_merged['ticker'].str.contains(ticker_regex, case=False, na=False, regex=True) &
             condition_mask
@@ -329,3 +333,118 @@ def perform_market_correlation_analysis(trades: List[Trade]) -> Dict[str, Market
     return results
 
 
+# Tier 4:
+# Multi-factor analysis
+
+def _calculate_atr(df, period=14):
+    """Helper function to calculate ATR using high, low, and close."""
+    # take a dataframe and check if it has high, low, and close prices
+    if not all(col in df.columns for col in ['High', 'Low', 'Close']):
+        return None
+    high_low = df['High'] - df['Low']
+    high_close_prev = abs(df['High'] - df['Close'].shift(1))
+    low_close_prev = abs(df['Low'] - df['Close'].shift(1))
+    # pick the largest value out of hl, hc, and lc
+    tr = pd.DataFrame({'hl': high_low, 'hc': high_close_prev, 'lc': low_close_prev}).max(axis=1)
+    # find the average true range by taking the average over the specified period
+    atr = tr.rolling(window=period, min_periods=period).mean()
+    return atr
+
+def add_indicators(trade_row: pd.Series) -> pd.Series:
+    """
+    Fetches daily market context (ATR, EMA Ratio) for a single trade using yfinance.
+    """
+    global yf_data_cache
+    ticker_map = {
+        'ES': 'ES=F',
+        'GC': 'GC=F',
+    }
+    yf_ticker = ticker_map.get(trade_row['ticker'], trade_row['ticker']) 
+    # set the parameters up for downloading enough data for indicators (EMA/ATR)
+    trade_date = pd.to_datetime(trade_row['entry_time']).date()
+    start_date = trade_date - pd.Timedelta(days=60) 
+    end_date = trade_date + pd.Timedelta(days=1)
+
+    # check if the data is already cached. if not, download the data and cache it
+    cache_key = (yf_ticker, start_date, end_date)
+    if cache_key in yf_data_cache:
+        daily_data = yf_data_cache[cache_key]
+    else:
+        try:
+            daily_data = yf.download(yf_ticker, start=start_date, end=end_date, progress=False, auto_adjust=True)
+            if daily_data.empty:
+                print(f"Warning: No yfinance data for {yf_ticker} from {start_date} to {end_date}")
+                return pd.Series({'Daily_ATR': np.nan, 'Daily_EMA21_Ratio': np.nan})
+            yf_data_cache[cache_key] = daily_data
+        except Exception as e:
+            print(f"Warning: yfinance download failed for {yf_ticker}: {e}")
+            return pd.Series({'Daily_ATR': np.nan, 'Daily_EMA21_Ratio': np.nan})
+
+    # use pandas_ta to calculate the indicators.
+    # I chose to use the 21 EMA because it's what I use when trading ES. however, that's on the 2000 tick chart
+    # EMA for general recent trend direction, and ATR for volatility. could add other indicators later, but we'll see
+    try:
+        daily_data.ta.ema(length=21, append=True) # appends 'EMA_21'
+        daily_data.ta.atr(length=14, append=True) # appends 'ATR_14'
+
+        # make sure columns exist before accessing
+        ema_col = 'EMA_21'
+        atr_col = 'ATR_14'
+
+        if ema_col not in daily_data.columns or atr_col not in daily_data.columns:
+             print(f"Warning: Could not calculate EMA/ATR for {yf_ticker}")
+             return pd.Series({'Daily_ATR': np.nan, 'Daily_EMA21_Ratio': np.nan})
+
+        # get the indicator values for the trade date
+        trade_date_dt = pd.to_datetime(trade_date)
+        context_data = daily_data[daily_data.index <= trade_date_dt].iloc[-1:] # get the last row on or before trade date
+
+        if context_data.empty:
+            return pd.Series({'Daily_ATR': np.nan, 'Daily_EMA21_Ratio': np.nan})
+
+        atr_value = context_data[atr_col].iloc[0]
+        ema21_value = context_data[ema_col].iloc[0]
+
+        # calculate the ema_ratio (the ratio of the trade's entry price, relative to the 21EMA)
+        ema_ratio = np.nan
+        if pd.notna(ema21_value) and ema21_value != 0:
+            ema_ratio = (trade_row['entry_price'] / ema21_value) - 1
+
+        return pd.Series({'Daily_ATR': atr_value, 'Daily_EMA21_Ratio': ema_ratio})
+
+    except Exception as e:
+        print(f"Error calculating indicators for {yf_ticker}: {e}")
+        return pd.Series({'Daily_ATR': np.nan, 'Daily_EMA21_Ratio': np.nan})
+
+
+def prepare_data_pattern_recognition(trades: List[Trade]) -> pd.DataFrame:
+    """
+    Prepares the data for the multi-factor pattern recognition analysis.
+    """
+    if not trades:
+        return pd.DataFrame()
+
+    df = pd.DataFrame([trade.model_dump() for trade in trades])
+
+    if 'pnl' not in df.columns or 'entry_time' not in df.columns or 'ticker' not in df.columns or 'entry_price' not in df.columns:
+        raise ValueError("Input trades missing required fields: pnl, entry_time, ticker, entry_price")
+
+    df['is_win'] = (df['pnl'] > 0).astype(int)
+
+    # for each row, add the indicators with the add_indicators function
+    # this might take a while, because we potentially have to download and add context row by row
+    print("Adding market context to trades through indicators (this may take a while)")
+    market_context = df.apply(add_indicators, axis=1)
+    df = pd.concat([df, market_context], axis=1)
+    print("Enrichment complete.")
+
+    # make sure entry and exit times are in datetime format
+    df['entry_time'] = pd.to_datetime(df['entry_time'])
+    if 'exit_time' in df.columns:
+        df['exit_time'] = pd.to_datetime(df['exit_time'])
+        # make sure there is an exit time and entry time to calculate duration
+        valid_duration = df['exit_time'].notna() & df['entry_time'].notna()
+        df.loc[valid_duration, 'duration_seconds'] = (df.loc[valid_duration, 'exit_time'] - df.loc[valid_duration, 'entry_time']).dt.total_seconds()
+        df['duration_seconds'].fillna(np.nan, inplace=True)
+
+    return df
