@@ -5,3 +5,5 @@ pydantic
 python-dotenv
 scikit-learn
 yfinance
+torch
+

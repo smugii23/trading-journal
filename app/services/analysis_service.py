@@ -14,7 +14,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 
 from app.models.trade_models import (
-    Trade, TimePerformanceMetrics, ClusterInfo, StrategyPerformanceMetrics,
+    Tag, Trade, TimePerformanceMetrics, ClusterInfo, StrategyPerformanceMetrics,
     MarketConditionPerformanceMetrics
 )
 
@@ -422,7 +422,7 @@ def add_indicators(trade_row: pd.Series) -> pd.Series:
         return pd.Series({'Daily_ATR': np.nan, 'Daily_EMA21_Ratio': np.nan})
 
 
-def prepare_data_pattern_recognition(trades: List[Trade]) -> pd.DataFrame:
+def prepare_data_pattern_recognition(trades: List[Trade], tags: List[Tag]) -> pd.DataFrame:
     """
     Prepares the data for the multi-factor pattern recognition analysis.
     """
@@ -476,5 +476,42 @@ def engineer_features(trades: pd.DataFrame) -> pd.DataFrame:
     trades['day_of_week'] = trades['entry_time'].dt.dayofweek
     trades['hour_of_day'] = trades['entry_time'].dt.hour
 
+    # one hot encoding for tags:
+    if 'tags' in trades.columns:
+        # fill None values with empty lists to avoid errors
+        trades['tags'] = trades['tags'].apply(lambda x: x if isinstance(x, list) else [])
+
+        # extract all unique tag names and categories
+        all_names = set()
+        all_categories = set()
+        for tag_list in trades['tags']:
+            if tag_list:
+                for tag in tag_list:
+                    if 'name' in tag: all_names.add(tag['name'])
+                    if 'category' in tag: all_categories.add(tag['category'])
+                    elif hasattr(tag, 'name') and hasattr(tag, 'category'):
+                         all_names.add(tag.name)
+                         all_categories.add(tag.category)
+
+
+        # create one-hot encoded columns for the tag names
+        for name in sorted(list(all_names)): # i just sorted this for consistency
+            col_name = f'tag_name_{name.replace(" ", "_").lower()}'
+            # create a column for each unique tag across all trades, and apply 1 to the column if it is present in the trade. apply 0 otherwise
+            trades[col_name] = trades['tags'].apply(lambda tl: 1 if any( (isinstance(t, dict) and t.get('name') == name) or (hasattr(t, 'name') and t.name == name) for t in tl) else 0)
+
+        # create one-hot encoded columns for the tag categories
+        for category in sorted(list(all_categories)):
+            col_name = f'tag_cat_{category.replace(" ", "_").lower()}'
+            # create a column for each unique category across all trades, and apply 1 for the category if it is present in the trade. apply 0 otherwise
+            trades[col_name] = trades['tags'].apply(lambda tl: 1 if any( (isinstance(t, dict) and t.get('category') == category) or (hasattr(t, 'category') and t.category == category) for t in tl) else 0)
+
+    else:
+        print("Warning: 'tags' column not found in DataFrame for feature engineering.")
+
+
     return trades
 
+
+def engineer_analysis(trades_df: pd.DataFrame) -> pd.DataFrame:
+    
