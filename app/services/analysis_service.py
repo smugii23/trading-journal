@@ -7,6 +7,11 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 import yfinance as yf
 import pandas_ta as ta
+import torch
+from torch.utils.data import Dataset, DataLoader
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
 
 from app.models.trade_models import (
     Trade, TimePerformanceMetrics, ClusterInfo, StrategyPerformanceMetrics,
@@ -352,7 +357,7 @@ def _calculate_atr(df, period=14):
 
 def add_indicators(trade_row: pd.Series) -> pd.Series:
     """
-    Fetches daily market context (ATR, EMA Ratio) for a single trade using yfinance.
+    Fetches daily market context (ATR, EMA for now) for a single trade using yfinance.
     """
     global yf_data_cache
     ticker_map = {
@@ -448,3 +453,28 @@ def prepare_data_pattern_recognition(trades: List[Trade]) -> pd.DataFrame:
         df['duration_seconds'].fillna(np.nan, inplace=True)
 
     return df
+
+
+def engineer_features(trades: pd.DataFrame) -> pd.DataFrame:
+    """
+    Engineers features for the multi-factor pattern recognition analysis.
+    """
+    # format features
+    # numerical features
+    trades['duration'] = (trades['exit_time'] - trades['entry_time']).dt.total_seconds()
+    trades['profit_margin'] = np.where(trades['direction'] == 'long', (trades['exit_price'] - trades['entry_price']) / trades['entry_price'], (trades['entry_price'] - trades['exit_price']) / trades['entry_price'])
+    trades['risk_reward_ratio'] = np.where(trades['direction'] == 'long', (trades['take_profit'] - trades['entry_price']) / (trades['entry_price'] - trades['stop_loss']), (trades['stop_loss'] - trades['entry_price']) / (trades['entry_price'] - trades['take_profit']))
+    trades['highest_price_excursion'] = np.where(trades['direction'] == 'long', (trades['highest_price'] - trades['entry_price']) / trades['entry_price'], (trades['entry_price'] - trades['highest_price']) / trades['entry_price'])
+    trades['lowest_price_excursion'] = np.where(trades['direction'] == 'long', (trades['lowest_price'] - trades['entry_price']) / trades['entry_price'], (trades['entry_price'] - trades['lowest_price']) / trades['entry_price'])
+    trades['normalized_quantity'] = trades['quantity'] / trades['entry_price']
+
+    # categorical features 
+    trades['is_long'] = np.where(trades['direction'] == 'long', 1, 0)
+    trades['ticker'] = np.where(trades['ticker'] == 'ES', 1, 0)
+
+    # time based features
+    trades['day_of_week'] = trades['entry_time'].dt.dayofweek
+    trades['hour_of_day'] = trades['entry_time'].dt.hour
+
+    return trades
+
