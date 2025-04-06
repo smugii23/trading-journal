@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 
-class SimpleTag(BaseModel): # Renamed from Tag
+class Tag(BaseModel):
     name: str
     category: str
 
@@ -25,7 +25,7 @@ class Trade(BaseModel):
     pnl: float = Field(..., description="Pre-calculated Profit/Loss for the trade")
     timestamp: Optional[datetime] = Field(None, description="Primary timestamp for analysis (ideally exit_time)")
     strategy_tag: Optional[str] = Field(None, description="Optional tag identifying the strategy used")
-    tags: Optional[List[SimpleTag]] = Field(None, description="List of tags (name and category) associated with the trade") # Corrected type hint and description
+    tags: Optional[List[Tag]] = Field(None, description="List of tags (name and category) associated with the trade") # Corrected type hint and description
 
 class TimePerformanceMetrics(BaseModel):
     """The performance metrics we will calculate for each time segment."""
